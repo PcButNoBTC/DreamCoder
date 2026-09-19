@@ -233,7 +233,7 @@ button,select,textarea,input{font:inherit}
 
 /* Particle canvas */
 #particleCanvas{
-  position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0.9;
+  position:fixed;inset:0;pointer-events:none;z-index:1;opacity:0.18;
 }
 .app-shell{position:relative;z-index:2;background:transparent}
 body{background:var(--bg)}
@@ -342,13 +342,13 @@ body.cursor-fx, body.cursor-fx *{cursor:none !important}
   background:#0e141d;
 }
 .analysis-recommendation:hover{border-color:#7c8cff55}
-.analysis-recommendation .rec-head{display:flex;gap:8px;justify-content:space-between}
-.analysis-recommendation .rec-title{font-size:10.5px;font-weight:650}
-.analysis-recommendation .rec-priority{font-size:8px;color:var(--accent2);text-transform:uppercase}
-.analysis-recommendation .rec-path{font:9px ui-monospace,monospace;color:var(--muted);margin-top:3px}
+.analysis-recommendation .rec-head{display:flex;gap:8px;justify-content:space-between;align-items:flex-start}
+.analysis-recommendation .rec-title{font-size:10.5px;font-weight:650;line-height:1.35;min-width:0;overflow-wrap:anywhere}
+.analysis-recommendation .rec-priority{font-size:8px;color:var(--accent2);text-transform:uppercase;flex:0 0 auto;padding-top:1px}
+.analysis-recommendation .rec-path{font:9px/1.35 ui-monospace,monospace;color:var(--muted);margin-top:4px;overflow-wrap:anywhere;word-break:break-word}
 .analysis-recommendation .rec-detail{font-size:9.5px;color:var(--muted);line-height:1.45;margin-top:5px}
 .analysis-recommendation .rec-actions{display:flex;gap:5px;margin-top:7px}
-.analysis-recommendation .rec-actions button{flex:1}
+.analysis-recommendation .rec-actions button{flex:1;min-width:0}
 .analysis-model-note{
   padding:8px;border:1px dashed #4de0b833;border-radius:7px;margin:8px 0;
   font-size:9px;color:var(--muted);line-height:1.4;
@@ -364,6 +364,18 @@ body.cursor-fx, body.cursor-fx *{cursor:none !important}
 }
 .icon-btn:hover{color:var(--text);border-color:var(--accent)}
 @media(max-width:650px){
-  .analysis-tab{top:34%}
-  .analysis-drawer{width:94vw}
+  .analysis-tab{top:34%;font-size:9px;padding:8px 7px 8px 9px}
+  .analysis-drawer{
+    width:calc(100vw - 12px);right:6px;top:6px;bottom:6px;
+    border:1px solid var(--border);border-radius:12px;
+    box-shadow:0 18px 60px #00000088;
+  }
+  .analysis-drawer-head{padding:12px}
+  .analysis-drawer-status{padding:9px 12px 4px}
+  .analysis-summary{padding:4px 12px 9px}
+  .analysis-project-type{margin:0 12px 8px}
+  .analysis-drawer-body{padding:0 12px 14px}
+  .analysis-recommendation{padding:10px;margin:8px 0}
+  .analysis-recommendation .rec-actions{display:block}
+  .analysis-recommendation .rec-actions button{width:100%;height:30px}
 }
