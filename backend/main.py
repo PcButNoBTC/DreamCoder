@@ -623,10 +623,22 @@ async def github_status():
 @app.post("/api/github/sync")
 async def github_sync_current():
     files = []
-    for item in router.index.list_files():
-        row = db.get_file(item["path"])
-        if row:
-            files.append({"path": item["path"], "content": row["content"]})
+    root = workspace.root()
+    if root is not None:
+        for path in root.rglob("*"):
+            if not path.is_file() or any(part in {".git","node_modules","__pycache__",".venv","venv","dist","build"} for part in path.parts):
+                continue
+            try:
+                rel = str(path.relative_to(root)).replace("\\", "/")
+                if path.stat().st_size <= 2_000_000:
+                    files.append({"path": rel, "content": path.read_text(encoding="utf-8", errors="ignore")})
+            except OSError:
+                continue
+    else:
+        for item in router.index.list_files():
+            row = db.get_file(item["path"])
+            if row:
+                files.append({"path": item["path"], "content": row["content"]})
     return await github_sync.sync_files(files, message="DreamCoder project snapshot")
 
 
