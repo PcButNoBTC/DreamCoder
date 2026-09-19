@@ -22,6 +22,7 @@ from watcher import IndexWatcher
 from analyzer import analyze_folder, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, self_heal, files_to_zip
+from agent.api import router as agent_router
 
 # ---------------------------------------------------------------------------
 app = FastAPI(
@@ -29,6 +30,10 @@ app = FastAPI(
     description="AI-native personal development studio",
     version="1.0.0",
 )
+
+
+app.include_router(agent_router)
+
 
 app.add_middleware(
     CORSMiddleware,
