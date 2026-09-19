@@ -251,7 +251,8 @@ async function saveCurrentFileLive() {
     }
   } catch (err) {
     setGithubSyncState("sync error", "error");
-    setStatus("Local edit pending");\n    showSyncBanner("Local save request failed; your editor contents are still open.", "error");
+    setStatus("Local edit pending");
+    showSyncBanner("Local save request failed; your editor contents are still open.", "error");
   }
 }
 
