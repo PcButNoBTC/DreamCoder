@@ -119,7 +119,7 @@ class AgentRuntime:
         await self._call(run,tools,"git_status",{})
         await self._call(run,tools,"search",{"query":req.goal,"limit":12})
         repair_context="" if run.repair_count == 0 else json.dumps(run.validation,default=str)
-        changes=await self._generate_changes(req,run,repair_context)
+        changes = run.changes if req.auto_apply and run.changes else await self._generate_changes(req,run,repair_context)
         if changes:
             run.changes=changes
             self._event(run,"changes.proposed",changes=[{"path":x["path"],"summary":x.get("summary","")} for x in changes])
