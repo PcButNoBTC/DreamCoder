@@ -402,3 +402,18 @@ body.cursor-fx, body.cursor-fx *{cursor:none !important}
 #workspaceGitState[data-state="clean"]{color:var(--accent2)}
 #workspaceGitState[data-state="dirty"]{color:var(--warn)}
 #workspaceGitState[data-state="error"]{color:var(--danger)}
+
+
+/* Sync banner */
+.sync-banner{display:flex;align-items:center;gap:10px;padding:8px 14px;font-size:11px;border-bottom:1px solid var(--border);flex-shrink:0}
+.sync-banner.error{background:#2a1114;color:#ff8a96;border-color:#ff6b7a44}
+.sync-banner.warn{background:#2a2311;color:#ffd98a;border-color:#ffc14d44}
+.sync-banner.info{background:#111a2a;color:#8ab4ff;border-color:#7c8cff44}
+.sync-banner-msg{flex:1}
+.sync-banner-backup code{background:#00000044;padding:2px 6px;border-radius:4px;font-size:10px}
+.sync-banner-close{background:transparent;border:0;color:inherit;cursor:pointer;font-size:16px;padding:0 4px}
+.change-type{display:inline-block;font-size:8px;padding:2px 6px;border-radius:4px;margin-right:6px;font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+.change-type[data-type="APP_CREATE"]{background:#4de0b822;color:#4de0b8}.change-type[data-type="APP_MODIFY"]{background:#7c8cff22;color:#7c8cff}.change-type[data-type="PROJECT_MODIFY"]{background:#ffc14d22;color:#ffc14d}.change-type[data-type="UI_MODIFY"]{background:#b58cff22;color:#b58cff}.change-type[data-type="CONFIG_MODIFY"]{background:#ff8a9622;color:#ff8a96}
+.diff-toggle{display:flex;gap:6px;margin:8px 0}.diff-toggle .btn{height:24px;font-size:10px;padding:0 10px}.diff-toggle .btn.active{border-color:var(--accent);color:var(--text)}
+.diff-unified,.diff-col{margin:0;padding:10px;background:#0a0d12;border-radius:8px;font:11px/1.5 ui-monospace,monospace;white-space:pre-wrap;color:#c5d0e0;max-height:340px;overflow:auto}.diff-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}.diff-col{font-size:10px}
+.quota-row{display:flex;justify-content:space-between;padding:4px 0;font-size:10px;border-bottom:1px solid #ffffff08}.quota-row:last-child{border-bottom:0}.quota-inf{color:var(--accent2);font-weight:700}.quota-ok{color:var(--accent2)}.quota-warn{color:var(--warn)}
