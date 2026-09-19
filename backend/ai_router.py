@@ -68,7 +68,12 @@ class AIRouter:
         self._models: dict[str, BaseModel] = {}
 
     def get_model(self, name: str) -> BaseModel:
-        """Resolve an explicit provider/model selection."""
+        """Resolve the selected model to a real provider whenever one is configured.
+
+        Hugging Face catalog IDs such as meta-llama/... are provider model IDs,
+        not mock display names. Unknown real IDs must not silently become Mock.
+        """
+        name = (name or "").strip()
         if name not in self._models:
             if name.startswith("ollama:"):
                 self._models[name] = OllamaModel(name.split(":", 1)[1])
@@ -76,6 +81,18 @@ class AIRouter:
                 self._models[name] = HuggingFaceModel(model_id=name.split(":", 1)[1])
             elif name.startswith("openai:"):
                 self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
+            elif "/" in name and os.getenv("HF_TOKEN"):
+                self._models[name] = HuggingFaceModel(model_id=name)
+            elif name in {"ollama", "Ollama", "Local Model"} and (
+                os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
+            ):
+                model_id = (
+                    os.getenv("OLLAMA_MODEL")
+                    or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
+                    or "qwen2.5-coder:7b"
+                )
+                base = os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or os.getenv("OLLAMA_BASE_URL")
+                self._models[name] = OllamaModel(model_id, base_url=base)
             else:
                 factory = MODEL_REGISTRY.get(name)
                 self._models[name] = factory() if factory is not None else MockModel(name)
