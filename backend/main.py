@@ -236,6 +236,17 @@ async def root():
     }
 
 
+@app.get("/api/settings")
+async def get_settings():
+    return {"ai_timeout":db.get_setting("ai_timeout",os.getenv("DREAMCODER_AI_TIMEOUT","120")),"agent_unrestricted":os.getenv("DREAMCODER_AGENT_UNRESTRICTED","0"),"agent_network":os.getenv("DREAMCODER_AGENT_NETWORK","0"),"autosync":os.getenv("DREAMCODER_GITHUB_AUTOSYNC","true"),"project_build_command":db.get_setting("project_build_command",""),"project_test_command":db.get_setting("project_test_command","")}
+
+@app.post("/api/settings")
+async def set_settings(body:dict):
+    if "ai_timeout" in body: db.set_setting("ai_timeout",str(max(5,min(int(body["ai_timeout"]),900))))
+    if "project_build_command" in body: db.set_setting("project_build_command",str(body["project_build_command"])[:500])
+    if "project_test_command" in body: db.set_setting("project_test_command",str(body["project_test_command"])[:500])
+    return await get_settings()
+
 @app.get("/api/production/readiness")
 async def production_readiness():
     return readiness()
