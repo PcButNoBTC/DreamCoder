@@ -76,13 +76,13 @@ class AgentRuntime:
                     except Exception: pass
         return None
 
-    async def _generate_changes(self, req: AgentRequest, run: AgentRun) -> list[dict[str, str]]:
+    async def _generate_changes(self, req: AgentRequest, run: AgentRun, repair_context: str = "") -> list[dict[str, str]]:
         project=self._project_context(req.cwd)
         plan="\n".join(f"- {s.title}: {s.purpose}" for s in run.plan)
         prompt=("You are DreamCoder's project coding agent.\n"
                 "Work only inside the supplied workspace snapshot. Do not invent files or dependencies.\n"
                 "Return ONLY JSON: {\"changes\":[{\"path\":\"relative/path\",\"content\":\"complete file content\",\"summary\":\"why\"}]}\n"
-                f"Goal: {req.goal}\nPlan:\n{plan}\nWorkspace snapshot:\n{project}")
+                f"Goal: {req.goal}\nPlan:\n{plan}\nRepair context:\n{repair_context or 'none'}\nWorkspace snapshot:\n{project}")
         from models.base import ChatContext
         result=await self.router.chat(req.model,ChatContext(message=prompt,mode="project",project_goal=db.get_setting("project_goal","") or "",project_context=project),use_cache=False)
         parsed=self._extract_json(result.content)
@@ -118,7 +118,7 @@ class AgentRuntime:
         tools=ToolRegistry(run.cwd,timeout=req.timeout,auto_apply=req.auto_apply)
         await self._call(run,tools,"git_status",{})
         await self._call(run,tools,"search",{"query":req.goal,"limit":12})
-        changes=await self._generate_changes(req,run)
+        repair_context="" if run.repair_count == 0 else json.dumps(run.validation,default=str)\n        changes=await self._generate_changes(req,run,repair_context)
         if changes:
             run.changes=changes
             self._event(run,"changes.proposed",changes=[{"path":x["path"],"summary":x.get("summary","")} for x in changes])
