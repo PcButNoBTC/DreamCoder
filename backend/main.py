@@ -683,8 +683,18 @@ async def start_watch(req: WatchRequest):
     def on_change(rel: str, content: str, language: str):
         if language == "deleted" or content == "":
             router.index.remove_file(rel)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(github_sync.delete_file(rel))
+            except RuntimeError:
+                pass
         else:
             router.index.index_file(rel, content, language)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(github_sync.sync_file(rel, content, message=f"DreamCoder external change: {rel}"))
+            except RuntimeError:
+                pass
 
     _watcher = IndexWatcher(root, on_change)
     info = _watcher.start()
