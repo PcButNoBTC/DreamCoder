@@ -176,7 +176,9 @@ class HuggingFaceModel(BaseModel):
                     try:
                         data=json.loads(payload)
                         token=data.get("token",{}).get("text") if isinstance(data,dict) else None
-                        if token:\n                            if provider_runtime: provider_runtime.record_usage("huggingface:"+self.model_id,0,max(1,len(token.split())))\n                            yield token
+                        if token:
+                            if provider_runtime: provider_runtime.record_usage("huggingface:"+self.model_id,0,max(1,len(token.split())))
+                            yield token
                         elif isinstance(data,dict) and data.get("generated_text"): yield data["generated_text"]
                     except Exception: continue
 
