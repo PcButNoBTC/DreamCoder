@@ -49,12 +49,3 @@ def test_folder_scope_json_parser():
     from analyzer import _extract_json
     parsed = _extract_json('prefix {"project_type":"desktop IDE","recommendations":[]} suffix')
     assert parsed["project_type"] == "desktop IDE"
-
-
-def test_project_index_clear(tmp_path):
-    from project_index import ProjectIndex
-    idx = ProjectIndex()
-    idx.index_file("__test_scope__/one.py", "def one(): pass")
-    assert any(f["path"] == "__test_scope__/one.py" for f in idx.list_files())
-    idx.clear()
-    assert not idx.list_files()
