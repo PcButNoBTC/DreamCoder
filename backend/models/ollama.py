@@ -15,6 +15,10 @@ from typing import Any, Optional
 import httpx
 
 from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
+try:
+    from provider_runtime import runtime as provider_runtime
+except Exception:
+    provider_runtime=None
 
 
 class OllamaModel(BaseModel):
@@ -191,4 +195,6 @@ Respond ONLY with the JSON array, no markdown fences.
                     data=json.loads(line)
                     if data.get("response"): yield data["response"]
                     if data.get("done"):
+                        if provider_runtime:
+                            provider_runtime.record_usage("ollama:"+self.model_name,int(data.get("prompt_eval_count",0) or 0),int(data.get("eval_count",0) or 0))
                         yield ""
