@@ -60,6 +60,13 @@ app.add_middleware(
 router = AIRouter()
 db.init_db()
 production_init()
+if db.get_setting('github_oauth_token',''):
+    os.environ['GITHUB_TOKEN']=db.get_setting('github_oauth_token','')
+    github_sync.token=os.environ['GITHUB_TOKEN']
+if db.get_setting('github_repo',''):
+    github_sync.repo=db.get_setting('github_repo','')
+if db.get_setting('github_branch',''):
+    github_sync.branch=db.get_setting('github_branch','')
 
 # Seed demo files if empty
 if not router.index.list_files():
@@ -257,6 +264,12 @@ async def github_oauth_callback(code:str="",state:str=""):
         return HTMLResponse("<script>window.close()</script><h3>DreamCoder connected to GitHub. You can close this window.</h3>")
     except Exception as exc:
         return HTMLResponse("<h3>GitHub sign-in failed.</h3><pre>"+escape_html(str(exc))+"</pre>",status_code=502)
+
+@app.post("/api/github/oauth/refresh")
+async def github_oauth_refresh():
+    d=await github_auth.refresh()
+    if d.get("ok"): github_sync.token=db.get_setting("github_oauth_token","")
+    return d
 
 @app.get("/api/github/me")
 async def github_me(): return await github_auth.user()
