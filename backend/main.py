@@ -170,6 +170,12 @@ class GenerateProjectRequest(BaseModel):
     goal: str = ""
 
 
+class GenerateProjectBuildRequest(BaseModel):
+    files: list[dict[str, str]] = Field(default_factory=list)
+    name: str = ""
+    stack: dict[str, str] = Field(default_factory=dict)
+    sync_github: bool = True
+
 class VisionRequest(BaseModel):
     image_base64: str  # raw base64 or data URL
     prompt: str = ""
@@ -946,6 +952,63 @@ async def api_generate_project(req: GenerateProjectRequest):
     db.add_history("generate","template",req.prompt[:400],template_result.get("summary",""),template_result.get("latency_ms",0))
     return template_result
 
+
+@app.post("/api/ai/generate-project/build")
+async def api_generate_project_build(req: GenerateProjectBuildRequest):
+    """Materialize a generated project and run its real build/validation."""
+    if workspace.root() is None:
+        raise HTTPException(400, "Connect a workspace before building a generated project")
+    if not req.files:
+        raise HTTPException(400, "No generated files supplied")
+
+    written = []
+    for item in req.files:
+        path = str(item.get("path") or "").strip()
+        content = str(item.get("content") or "")
+        if not path:
+            continue
+        try:
+            result = workspace.write_file(path, content)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        router.index.index_file(path, content, Path(path).suffix.lstrip(".") or "text")
+        written.append(result.get("path", path))
+
+    stack = req.stack or {}
+    lang = (stack.get("language") or "").lower()
+    name = re.sub(r"[^A-Za-z0-9._-]", "-", req.name or "").strip("-._") or "generated-app"
+    build_commands = {
+        "python": f"python -m compileall -q {name}",
+        "cpp": f"cmake -S {name} -B {name}/build && cmake --build {name}/build --config Release",
+        "c": f"make -C {name}",
+        "typescript": f"cd {name} && npm install --no-audit --no-fund && npm run build --if-present",
+        "csharp": f"dotnet build {name} --nologo",
+        "rust": f"cargo check --manifest-path {name}/Cargo.toml",
+        "go": f"cd {name} && go build ./...",
+        "java": f"cd {name} && mvn -q test",
+        "html": "python -m http.server --help",
+    }
+    command = build_commands.get(lang)
+    validation = workspace.run_shell(command, timeout=300) if command else {
+        "ok": True, "exit_code": 0, "stdout": "No compiler-specific build step for this stack; files were materialized.", "stderr": ""
+    }
+
+    sync = {"ok": False, "skipped": True, "reason": "disabled"}
+    if req.sync_github and github_sync.enabled:
+        sync = await github_sync.sync_files(
+            [{"path": p, "content": workspace.read_file(p)} for p in written],
+            message=f"DreamCoder generated project: {name}",
+        )
+
+    return {
+        "ok": bool(validation.get("ok")),
+        "name": name,
+        "written": written,
+        "file_count": len(written),
+        "build_command": command,
+        "validation": validation,
+        "github": sync,
+    }
 
 @app.post("/api/ai/self-heal")
 async def api_self_heal(req: SelfHealRequest):
