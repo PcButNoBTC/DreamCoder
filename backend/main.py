@@ -242,13 +242,16 @@ async def root():
 
 @app.get("/api/settings")
 async def get_settings():
-    return {"ai_timeout":db.get_setting("ai_timeout",os.getenv("DREAMCODER_AI_TIMEOUT","120")),"agent_unrestricted":os.getenv("DREAMCODER_AGENT_UNRESTRICTED","0"),"agent_network":os.getenv("DREAMCODER_AGENT_NETWORK","0"),"autosync":os.getenv("DREAMCODER_GITHUB_AUTOSYNC","true"),"project_build_command":db.get_setting("project_build_command",""),"project_test_command":db.get_setting("project_test_command","")}
+    return {"ai_timeout":db.get_setting("ai_timeout",os.getenv("DREAMCODER_AI_TIMEOUT","120")),"agent_unrestricted":db.get_setting("agent_unrestricted",os.getenv("DREAMCODER_AGENT_UNRESTRICTED","0")),"agent_network":db.get_setting("agent_network",os.getenv("DREAMCODER_AGENT_NETWORK","0")),"autosync":os.getenv("DREAMCODER_GITHUB_AUTOSYNC","true"),"project_build_command":db.get_setting("project_build_command",""),"project_test_command":db.get_setting("project_test_command","")}
 
 @app.post("/api/settings")
 async def set_settings(body:dict):
     if "ai_timeout" in body: db.set_setting("ai_timeout",str(max(5,min(int(body["ai_timeout"]),900))))
     if "project_build_command" in body: db.set_setting("project_build_command",str(body["project_build_command"])[:500])
     if "project_test_command" in body: db.set_setting("project_test_command",str(body["project_test_command"])[:500])
+    if "agent_unrestricted" in body: db.set_setting("agent_unrestricted","1" if bool(body["agent_unrestricted"]) else "0")
+    if "agent_network" in body: db.set_setting("agent_network","1" if bool(body["agent_network"]) else "0")
+    if "recovery_enabled" in body: db.set_setting("recovery_enabled","1" if bool(body["recovery_enabled"]) else "0")
     return await get_settings()
 
 @app.get("/api/production/readiness")
