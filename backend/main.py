@@ -32,7 +32,7 @@ from production import readiness, diagnostics, init as production_init
 from project_memory import memory
 from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
 from security import capabilities
-from credentials import status as credential_status
+from credentials import status as credential_status, get_secret as get_credential, available as credentials_available
 import github_auth, git_workflow
 from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
@@ -60,8 +60,9 @@ app.add_middleware(
 router = AIRouter()
 db.init_db()
 production_init()
-if db.get_setting('github_oauth_token',''):
-    os.environ['GITHUB_TOKEN']=db.get_setting('github_oauth_token','')
+_stored_github_token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','')
+if _stored_github_token:
+    os.environ['GITHUB_TOKEN']=_stored_github_token
     github_sync.token=os.environ['GITHUB_TOKEN']
 if db.get_setting('github_repo',''):
     github_sync.repo=db.get_setting('github_repo','')
