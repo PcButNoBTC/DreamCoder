@@ -3,7 +3,7 @@ import asyncio,os,signal,uuid,subprocess
 SESSIONS={}
 class Session:
     def __init__(self,command,cwd):
-        self.id=uuid.uuid4().hex; self.command=command; self.cwd=cwd; self.proc=None; self.master=None
+        self.id=uuid.uuid4().hex; self.command=command; self.cwd=cwd; self.proc=None; self.master=None; self.queue=asyncio.Queue(); self.winpty=None; self.pid=None
     async def start(self):
         if os.name!="nt":
             import pty
@@ -72,4 +72,4 @@ class Session:
             try:self.proc.kill()
             except Exception:pass
 async def create(command,cwd):
-    s=Session(command,cwd); s.queue=asyncio.Queue(); await s.start(); SESSIONS[s.id]=s; return s
+    s=Session(command,cwd); await s.start(); SESSIONS[s.id]=s; return s
