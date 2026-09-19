@@ -1110,7 +1110,7 @@ async function readFileBlob(file) {
   });
 }
 
-async function ingestFiles(rawList, rootName) {
+async function ingestFiles(rawList, rootName, replaceExisting = false) {
   const payload = [];
   for (const item of rawList) {
     const path = (item.path || item.file?.name || "file").replace(/\\/g, "/");
@@ -1133,6 +1133,12 @@ async function ingestFiles(rawList, rootName) {
   if (!payload.length) {
     toast("No text source files found in drop", "info");
     return;
+  }
+
+  if (replaceExisting) {
+    fileBuffers = {};
+    currentPath = "";
+    renderFileTree([]);
   }
 
   setStatus(`Indexing ${payload.length} files…`);
@@ -1161,7 +1167,7 @@ async function ingestFiles(rawList, rootName) {
   try {
     const data = await api("/api/files/bulk", {
       method: "POST",
-      body: JSON.stringify({ files: payload, root_name: rootName || "dropped-project" }),
+      body: JSON.stringify({ files: payload, root_name: rootName || "dropped-project", replace_existing: replaceExisting }),
     });
     setTerminal(
       `$ dreamcoder import\n\n✓ Indexed ${data.indexed} files\n` +
@@ -1254,7 +1260,7 @@ if (dropZone) {
       const entry = e.dataTransfer.items[0].webkitGetAsEntry?.();
       if (entry?.isDirectory) rootName = entry.name;
     }
-    await ingestFiles(list, rootName);
+    await ingestFiles(list, rootName, true);
   });
   dropZone.addEventListener("click", (e) => {
     if (e.target.closest("input")) return;
@@ -1295,7 +1301,7 @@ document.querySelector(".workspace")?.addEventListener("drop", async (e) => {
   if (e.target.closest("#dropZone")) return;
   e.preventDefault();
   const list = await collectDroppedItems(e.dataTransfer);
-  if (list.length) await ingestFiles(list, "dropped-project");
+  if (list.length) await ingestFiles(list, "dropped-project", true);
 });
 
 /* ========== Hugging Face catalog ========== */
