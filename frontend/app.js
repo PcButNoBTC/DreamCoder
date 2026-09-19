@@ -1414,7 +1414,28 @@ function renderFileTree(paths) {
 
 function openPath(path) {
   if (!path) return;
-  fileBuffers[currentPath] = editor.value;
+  const previousPath = currentPath;
+  const previousContent = editor.value;
+  fileBuffers[previousPath] = previousContent;
+
+  if (previousPath && previousPath !== path) {
+    githubSyncPromise = githubSyncPromise.catch(() => {}).then(async () => {
+      try {
+        const data = await api("/api/files/save", {
+          method: "POST",
+          body: JSON.stringify({
+            path: previousPath,
+            content: previousContent,
+            language: langFromPath(previousPath),
+            sync_github: true,
+            commit_message: "DreamCoder file switch save: " + previousPath,
+          }),
+        });
+        if (data.github?.ok) setGithubSyncState("synced ✓", "ready");
+      } catch (_) {}
+    });
+  }
+
   if (!(path in fileBuffers)) fileBuffers[path] = "";
   currentPath = path;
   editor.value = fileBuffers[path] || "";
@@ -1425,10 +1446,6 @@ function openPath(path) {
   });
   if (typeof renderTabs === "function") renderTabs();
   setStatus(`Opened ${path}`);
-  api("/api/files/save", {
-    method: "POST",
-    body: JSON.stringify({ path, content: editor.value, language: langFromPath(path) }),
-  }).catch(() => {});
 }
 
 // Drop zone wiring
