@@ -819,6 +819,19 @@ function renderAnalysis(data) {
     html += '<div class="analysis-model-note">No model recommendations were returned for this folder. Try another selected model or refine the project goal.</div>';
   }
 
+  const reports = data.file_reports || [];
+  if (reports.length) {
+    html += '<div class="analysis-section">File findings</div>';
+    reports.forEach((f) => {
+      const findings = [...(f.issues || []), ...(f.ideas || [])].slice(0, 4);
+      if (!findings.length) return;
+      html += '<div class="analysis-recommendation">' +
+        '<div class="rec-title">' + escapeHtml(f.path) + '</div>' +
+        '<div class="rec-detail">' + findings.map(escapeHtml).join('<br>') + '</div>' +
+        '</div>';
+    });
+  }
+
   document.getElementById("analysisBodyDrawer").innerHTML = html;
   window._analysisActions = actions;
   window._analysisProposals = {};
