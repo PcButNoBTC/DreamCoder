@@ -11,7 +11,8 @@ import re
 import time
 import zipfile
 from io import BytesIO
-from typing import Any\nfrom pathlib import Path
+from typing import Any
+from pathlib import Path
 
 
 def _detect_stack(prompt: str) -> dict[str, str]:
