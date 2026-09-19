@@ -260,7 +260,7 @@ async def production_diagnostics():
 
 @app.get("/api/github/oauth/config")
 async def github_oauth_config():
-    return {"configured":github_auth.configured()}
+    return {"configured":github_auth.configured(),"app_configured":github_auth.app_configured()}
 
 
 @app.get("/api/github/me")
@@ -268,7 +268,7 @@ async def github_me(): return await github_auth.user()
 @app.get("/api/github/oauth/config")
 async def github_oauth_config(): return {"configured":github_auth.configured(),"app_configured":github_auth.app_configured()}
 @app.get("/api/github/repositories")
-async def github_repositories(): return await github_auth.repositories()
+async def github_repositories(installation_id:int|None=None): return await github_auth.repositories(installation_id)
 @app.post("/api/github/disconnect")
 async def github_disconnect(): return github_auth.disconnect()
 @app.post("/api/github/select-repository")
