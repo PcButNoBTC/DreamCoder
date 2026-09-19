@@ -4,7 +4,7 @@ import asyncio, json, subprocess, time
 from pathlib import Path
 from typing import Any
 import db, workspace
-from checkpoints import create
+from checkpoints import create, restore
 from security import audit, redact
 class AgentOrchestrator:
     def __init__(self, runtime): self.runtime=runtime
@@ -27,12 +27,22 @@ class AgentOrchestrator:
             audit("agent.repair",attempt=repairs,error=redact((result.get("stderr") or result.get("error") or "")[:1000]))
             repair_req=type(req)(goal=f"{req.goal}\nFix this build/test failure and preserve all existing behavior:\n{redact(str(result))}",cwd=req.cwd,model=req.model,max_repairs=1,auto_apply=True,timeout=req.timeout)
             run=await self.runtime.run(repair_req); history.append(run.to_dict())
-        return {"ok":run.status=="completed" and bool(run.validation.get("ok",True)),"run":run.to_dict(),"checkpoint":cp,"history":history,"repairs":repairs,"verify_command":command}
+        success=run.status=="completed" and bool(run.validation.get("ok",True))
+        rollback=None
+        if not success and cp.get("path"):
+            rollback=restore(req.cwd,cp["path"],dry_run=False)
+            audit("agent.rollback",ok=rollback.get("ok",False),reason="verification failed")
+        else:
+            audit("agent.verified",repairs=repairs)
+        return {"ok":success,"run":run.to_dict(),"checkpoint":cp,"history":history,"repairs":repairs,"verify_command":command,"rollback":rollback}
     def _detect_command(self,root):
         p=Path(root)
         if (p/"pyproject.toml").exists() or (p/"pytest.ini").exists() or (p/"tests").exists(): return "python -m pytest -q"
         if (p/"package.json").exists(): return "npm test -- --runInBand"
         if (p/"Cargo.toml").exists(): return "cargo test"
+        if (p/"requirements.txt").exists(): return "python -m pytest -q"
+        if (p/"pom.xml").exists(): return "mvn -q test"
+        if (p/"build.gradle").exists() or (p/"gradlew").exists(): return "./gradlew test"
         if (p/"go.mod").exists(): return "go test ./..."
         if (p/"CMakeLists.txt").exists(): return "cmake -S . -B build && cmake --build build"
         if (p/"Makefile").exists(): return "make"
