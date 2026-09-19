@@ -4,6 +4,7 @@ import difflib
 import os
 import subprocess
 import time
+import db
 from pathlib import Path
 from typing import Any
 
@@ -60,8 +61,11 @@ class ToolRegistry:
         p=subprocess.run(command,cwd=self.root,shell=True,capture_output=True,text=True,timeout=self.timeout,env=os.environ.copy())
         return {"ok":p.returncode==0,"command":command,"exit_code":p.returncode,"stdout":p.stdout[-12000:],"stderr":p.stderr[-12000:],"latency_ms":int((time.perf_counter()-started)*1000)}
 
-    def test(self, command: str = "pytest -q") -> dict[str, Any]:
-        return self.run(command)
+    def test(self, command: str = "") -> dict[str, Any]:
+        configured = db.get_setting("project_commands", []) or []
+        if not command and configured:
+            command = configured[0]
+        return self.run(command or "pytest -q")
 
     def git_status(self) -> dict[str, Any]:
         return self.run("git status --short --branch")
