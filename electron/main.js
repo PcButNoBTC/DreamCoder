@@ -10,11 +10,14 @@ const BACKEND_PORT = Number(process.env.DREAMCODER_BACKEND_PORT || 8000);
 const FRONTEND = path.join(__dirname, "..", "frontend", "index.html");
 
 function startBackend() {
-  const backendDir = path.join(__dirname, "..", "backend");
-  const cmd = process.platform === "win32" ? "python" : "python3";
-  backendProc = spawn(cmd, ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", String(BACKEND_PORT)], {
-    cwd: backendDir, shell: false, stdio: "pipe", windowsHide: true
-  });
+  if (app.isPackaged) {
+    const exe = path.join(process.resourcesPath, "backend", process.platform === "win32" ? "dreamcoder-backend.exe" : "dreamcoder-backend");
+    backendProc = spawn(exe, ["--host", "127.0.0.1", "--port", String(BACKEND_PORT)], { cwd: process.resourcesPath, shell:false, stdio:"pipe", windowsHide:true });
+  } else {
+    const backendDir = path.join(__dirname, "..", "backend");
+    const cmd = process.platform === "win32" ? "python" : "python3";
+    backendProc = spawn(cmd, ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", String(BACKEND_PORT)], { cwd: backendDir, shell:false, stdio:"pipe", windowsHide:true });
+  }
   backendProc.stdout.on("data", d => console.log("[backend]", String(d)));
   backendProc.stderr.on("data", d => console.error("[backend]", String(d)));
   backendProc.on("exit", code => {
