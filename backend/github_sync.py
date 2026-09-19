@@ -67,6 +67,8 @@ class GitHubSync:
     async def sync_file_with_backup(self, root: str, path: str, content: str, message: str | None = None) -> dict[str, Any]:
         result=await self.sync_file(path,content,message)
         if result.get("ok") or result.get("skipped"): return result
+        if os.getenv("DREAMCODER_BACKUP_ON_SYNC_FAILURE","true").lower() in {"0","false","no","off"}:
+            return result
         try:
             from backup_manager import write_backup
             result["backup"]=write_backup(root,path,content,reason=f"github sync failed: {result.get('error','unknown')}")
