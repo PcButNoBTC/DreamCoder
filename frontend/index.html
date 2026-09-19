@@ -259,7 +259,17 @@ Type a command and press Enter (runs on the machine hosting the backend).
           <div id="quotaDisplay" class="muted">Loading…</div>
         </section>
 
-        <section class="card" id="ollamaCard" data-ai-panel="panel-models">
+        <section class="card" id="productionCard" data-ai-panel="panel-models">
+  <div class="card-head"><span>🛡 Production Control</span><span class="badge">READYNESS</span></div>
+  <div id="productionStatus" class="muted">Checking workspace, AI, GitHub and recovery services…</div>
+  <div class="patch-actions" style="margin-top:6px">
+    <button class="chip" id="productionCheckBtn" type="button">Run diagnostics</button>
+    <button class="chip" id="checkpointBtn" type="button">Checkpoint</button>
+  </div>
+  <pre id="productionDetails" class="muted" style="white-space:pre-wrap;max-height:180px;overflow:auto;margin-top:6px"></pre>
+</section>
+
+<section class="card" id="ollamaCard" data-ai-panel="panel-models">
           <div class="card-head"><span>🦙 Ollama Endpoints</span><span class="badge">PRIMARY</span></div>
           <div class="muted" style="margin-bottom:6px">Add a host URL you own or have permission to use. Models will be ranked by suitability.</div>
           <div class="evolve-input-row" style="margin-bottom:6px">
@@ -333,5 +343,14 @@ Type a command and press Enter (runs on the machine hosting the backend).
   <div id="modalRoot"></div>
 
   <script src="app.js"></script>
+<script>
+(function(){
+ const api=()=>window.DREAMCODER_API||"";
+ async function check(){try{const r=await fetch(api()+"/api/production/readiness");const d=await r.json();const el=document.getElementById("productionStatus");el.textContent=(d.ok?"Ready":"Needs configuration")+" · "+Object.entries(d.checks||{}).map(([k,v])=>k+":"+(v?"✓":"—")).join(" · ");document.getElementById("productionDetails").textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById("productionStatus").textContent="Backend diagnostics unavailable: "+e}}
+ document.getElementById("productionCheckBtn")?.addEventListener("click",check);
+ document.getElementById("checkpointBtn")?.addEventListener("click",async()=>{try{const r=await fetch(api()+"/api/workspace/checkpoint",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason:"manual-ui"})});const d=await r.json();document.getElementById("productionStatus").textContent=d.ok?"Checkpoint created: "+d.path:JSON.stringify(d)}catch(e){document.getElementById("productionStatus").textContent=String(e)}});
+ setTimeout(check,800);
+})();
+</script>
 </body>
 </html>
