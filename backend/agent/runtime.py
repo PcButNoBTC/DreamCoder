@@ -118,7 +118,8 @@ class AgentRuntime:
         tools=ToolRegistry(run.cwd,timeout=req.timeout,auto_apply=req.auto_apply)
         await self._call(run,tools,"git_status",{})
         await self._call(run,tools,"search",{"query":req.goal,"limit":12})
-        repair_context="" if run.repair_count == 0 else json.dumps(run.validation,default=str)\n        changes=await self._generate_changes(req,run,repair_context)
+        repair_context="" if run.repair_count == 0 else json.dumps(run.validation,default=str)
+        changes=await self._generate_changes(req,run,repair_context)
         if changes:
             run.changes=changes
             self._event(run,"changes.proposed",changes=[{"path":x["path"],"summary":x.get("summary","")} for x in changes])
@@ -135,6 +136,7 @@ class AgentRuntime:
             run.repair_count+=1
             self._event(run,"validation.failed",details=validation)
             if run.repair_count<=req.max_repairs:
+                run.changes=[]
                 run.status="repair_needed"; self._persist(run)
                 self._event(run,"repair.proposed",message="Tests failed; approve to let the selected model generate a repair.")
                 return run
