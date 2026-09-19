@@ -20,4 +20,4 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: .
-        run: pytest -q
+        run: pytest -q\n      - name: Run permission and backup tests\n        run: |\n          pytest backend/tests/test_permissions.py -q\n          pytest backend/tests/test_backup_manager.py -q
