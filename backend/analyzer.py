@@ -116,19 +116,145 @@ def _make_smart_patch(path, content, idea, language):
     }
 
 
+def _folder_context(index: ProjectIndex, max_chars: int = 50000) -> str:
+    """Build context strictly from the currently indexed folder."""
+    parts: list[str] = []
+    total = 0
+    for f in index.list_files():
+        full = index.get_file(f["path"]) or {}
+        content = full.get("content") or ""
+        lang = full.get("language") or f.get("language") or "text"
+        block = f"\n===== FILE: {f['path']} ({lang}) =====\n{content}"
+        if total + len(block) > max_chars:
+            remaining = max_chars - total
+            if remaining > 200:
+                parts.append(block[:remaining] + "\n...[context truncated]...")
+            break
+        parts.append(block)
+        total += len(block)
+    return "".join(parts) or "(folder is empty)"
+
+
+def _extract_json(text: str) -> dict[str, Any] | None:
+    """Accept plain JSON or a JSON object wrapped in prose."""
+    raw = (text or "").strip()
+    try:
+        value = __import__("json").loads(raw)
+        return value if isinstance(value, dict) else None
+    except Exception:
+        m = re.search(r"\{.*\}", raw, re.S)
+        if not m:
+            return None
+        try:
+            value = __import__("json").loads(m.group(0))
+            return value if isinstance(value, dict) else None
+        except Exception:
+            return None
+
+
+async def analyze_folder_with_model(
+    index: ProjectIndex,
+    model_name: str,
+    project_goal: str = "",
+    router: Any = None,
+) -> dict[str, Any]:
+    """Have the selected model identify the folder before proposing improvements."""
+    start = time.perf_counter()
+    base = analyze_folder(index, project_goal=project_goal)
+
+    if router is None:
+        base["model_analysis"] = {"status": "unavailable", "reason": "No model router supplied"}
+        return base
+
+    context = _folder_context(index)
+    prompt = f"""
+You are DreamCoder's project-analysis model.
+Analyze ONLY the repository/folder contents included below. Do not use outside files,
+invent dependencies, or assume facts not present in the folder.
+
+First identify what this project actually is, its architecture, technologies, important
+entrypoints, and development direction. Then propose concrete improvements that would
+help someone continue developing THIS project.
+
+Return ONLY valid JSON with these keys:
+project_type, summary, architecture, strengths, risks, recommendations
+
+recommendations must be an array of objects with:
+title, why, path, instruction, priority
+
+Project goal:
+{project_goal or "(not set)"}
+
+Folder contents:
+{context}
+""".strip()
+
+    from models.base import ChatContext
+    result = await router.chat(
+        model_name,
+        ChatContext(
+            message=prompt,
+            mode="analysis",
+            project_goal=project_goal,
+            project_context=context,
+        ),
+        use_cache=False,
+    )
+    parsed = _extract_json(result.content)
+    if not parsed:
+        base["model_analysis"] = {
+            "status": "invalid_response",
+            "model": result.model,
+            "backend": result.backend,
+            "raw": result.content[:4000],
+        }
+        base["latency_ms"] = int((time.perf_counter() - start) * 1000)
+        return base
+
+    recommendations = []
+    for rec in parsed.get("recommendations") or []:
+        if not isinstance(rec, dict) or not rec.get("title"):
+            continue
+        recommendations.append({
+            "title": str(rec.get("title"))[:140],
+            "detail": str(rec.get("why") or "")[:500],
+            "path": str(rec.get("path") or ""),
+            "instruction": str(rec.get("instruction") or "")[:1000],
+            "priority": str(rec.get("priority") or "medium"),
+            "target": "file" if rec.get("path") else "project",
+            "kind": "model",
+            "model": result.model,
+        })
+
+    base["model_analysis"] = {
+        "status": "complete",
+        "model": result.model,
+        "backend": result.backend,
+        "project_type": str(parsed.get("project_type") or "Unknown"),
+        "summary": str(parsed.get("summary") or ""),
+        "architecture": parsed.get("architecture") or [],
+        "strengths": parsed.get("strengths") or [],
+        "risks": parsed.get("risks") or [],
+    }
+    base["project_ideas"] = recommendations
+    base["actions"] = recommendations
+    base["summary"] = (
+        f"Analyzed {base['files_analyzed']} files · {base['totals']['lines']} lines · "
+        f"{base['totals']['functions']} functions · {base['totals']['classes']} classes · "
+        f"health {base['health']}% · {result.model}"
+    )
+    base["latency_ms"] = int((time.perf_counter() - start) * 1000)
+    return base
+
+
 def analyze_folder(index: ProjectIndex, project_goal: str = "") -> dict[str, Any]:
-    """Deep analysis of every indexed file + project-level recommendations."""
+    """Deterministic folder metrics; model reasoning is opt-in via analyze_folder_with_model."""
     start = time.perf_counter()
     files = index.list_files()
     file_reports = []
     totals = {
-        "lines": 0,
-        "functions": 0,
-        "classes": 0,
-        "with_types": 0,
-        "with_docs": 0,
-        "with_tests": 0,
-        "with_error_handling": 0,
+        "lines": 0, "functions": 0, "classes": 0, "with_types": 0,
+        "with_docs": 0, "with_tests": 0, "with_error_handling": 0,
     }
 
     for f in files:
@@ -139,14 +265,10 @@ def analyze_folder(index: ProjectIndex, project_goal: str = "") -> dict[str, Any
         totals["lines"] += m["lines"]
         totals["functions"] += m["functions"]
         totals["classes"] += m["classes"]
-        if m["has_types"]:
-            totals["with_types"] += 1
-        if m["has_doc"]:
-            totals["with_docs"] += 1
-        if m["has_test"]:
-            totals["with_tests"] += 1
-        if m["has_try"]:
-            totals["with_error_handling"] += 1
+        totals["with_types"] += int(m["has_types"])
+        totals["with_docs"] += int(m["has_doc"])
+        totals["with_tests"] += int(m["has_test"])
+        totals["with_error_handling"] += int(m["has_try"])
 
         issues = []
         ideas = []
@@ -154,132 +276,51 @@ def analyze_folder(index: ProjectIndex, project_goal: str = "") -> dict[str, Any
             issues.append("File is large – consider splitting into modules")
         if m["functions"] > 0 and not m["has_types"] and lang == "python":
             issues.append("Missing type hints on functions")
-            ideas.append("Add return and parameter type annotations")
         if m["classes"] > 0 and not m["has_doc"]:
             issues.append("Classes lack docstrings")
-            ideas.append("Document public classes and methods")
         if m["functions"] > 3 and not m["has_try"]:
-            ideas.append("Add try/except around external or model calls")
+            issues.append("Consider explicit error handling where external I/O occurs")
         if not m["has_test"] and (m["functions"] > 0 or m["classes"] > 0):
-            ideas.append("Add unit tests for core functions")
+            issues.append("No obvious test coverage marker")
         if m["comment_ratio"] < 0.05 and m["lines"] > 40:
-            ideas.append("Increase brief comments for non-obvious logic")
+            ideas.append("Clarify non-obvious logic with concise comments")
         if m["imports"] > 15:
             issues.append("Many imports – possible tight coupling")
-            ideas.append("Group imports and check for unused ones")
 
-        file_reports.append(
-            {
-                "path": f["path"],
-                "language": lang,
-                "metrics": m,
-                "issues": issues,
-                "ideas": ideas,
-                "score": max(20, 100 - len(issues) * 12 - (0 if m["has_types"] else 8)),
-            }
-        )
-
-    # Project-level suggestions guided by goal
-    goal = (project_goal or "").strip()
-    project_ideas = []
-    if goal:
-        project_ideas.append(
-            {
-                "title": "Align structure with project goal",
-                "detail": f'Goal: "{goal[:200]}". Ensure modules map cleanly to this outcome.',
-            }
-        )
-    if totals["with_types"] < len(files) * 0.5 and files:
-        project_ideas.append(
-            {
-                "title": "Roll out type hints project-wide",
-                "detail": f"Only {totals['with_types']}/{len(files)} files use types – improves IDE help and AI context.",
-            }
-        )
-    if totals["with_tests"] == 0 and files:
-        project_ideas.append(
-            {
-                "title": "Introduce a tests/ package",
-                "detail": "No test markers found. Start with one test per core module.",
-            }
-        )
-    if totals["with_docs"] < len(files) * 0.4 and files:
-        project_ideas.append(
-            {
-                "title": "Document public APIs",
-                "detail": "Few files have docstrings – helps both humans and AI assistants.",
-            }
-        )
-    if len(files) >= 2:
-        project_ideas.append(
-            {
-                "title": "Keep a single entrypoint",
-                "detail": "Expose one clear main/CLI so Run and AI tools know where to start.",
-            }
-        )
-    project_ideas.append(
-        {
-            "title": "Cache repeated AI prompts",
-            "detail": "Identical contexts should hit the suggestion cache to cut latency.",
-        }
-    )
-    project_ideas.append(
-        {
-            "title": "Separate adapters from core logic",
-            "detail": "Model providers (Ollama/HF/API) behind one interface keeps the app portable.",
-        }
-    )
-
-    # Overall health
-    n = max(len(files), 1)
-    health = int(
-        55
-        + (totals["with_types"] / n) * 15
-        + (totals["with_docs"] / n) * 10
-        + (totals["with_error_handling"] / n) * 10
-        + min(10, totals["with_tests"] * 5)
-    )
-    health = min(98, health)
-
-    # Actionable live recommendations (user can apply)
-    actions = []
-    for fr in file_reports:
-        path = fr["path"]
-        full = index.get_file(path) or {}
-        content = full.get("content") or ""
-        for idea in fr.get("ideas") or []:
-            patch = _make_smart_patch(path, content, idea, full.get("language") or "python")
-            if patch:
-                actions.append(patch)
-        for issue in fr.get("issues") or []:
-            patch = _make_smart_patch(path, content, issue, full.get("language") or "python")
-            if patch and patch["id"] not in {a["id"] for a in actions}:
-                actions.append(patch)
-    for idea in project_ideas[:4]:
-        actions.append({
-            "id": f"proj-{abs(hash(idea['title'])) % 10**8}",
-            "title": idea["title"],
-            "detail": idea.get("detail") or "",
-            "target": "note",
-            "path": "",
-            "code": "",
-            "kind": "project",
+        file_reports.append({
+            "path": f["path"],
+            "language": lang,
+            "metrics": m,
+            "issues": issues,
+            "ideas": ideas,
+            "score": max(20, 100 - len(issues) * 10 - (0 if m["has_types"] else 5)),
         })
 
-    latency = int((time.perf_counter() - start) * 1000)
+    n = max(len(files), 1)
+    health = min(98, int(
+        55 + (totals["with_types"] / n) * 15 +
+        (totals["with_docs"] / n) * 10 +
+        (totals["with_error_handling"] / n) * 10 +
+        min(10, totals["with_tests"] * 5)
+    ))
+
     return {
         "files_analyzed": len(files),
         "totals": totals,
         "file_reports": file_reports,
-        "project_ideas": project_ideas,
-        "project_goal": goal,
+        "project_ideas": [],
+        "project_goal": (project_goal or "").strip(),
         "health": health,
-        "latency_ms": latency,
-        "actions": actions,
+        "latency_ms": int((time.perf_counter() - start) * 1000),
+        "actions": [],
         "summary": (
             f"Analyzed {len(files)} files · {totals['lines']} lines · "
             f"{totals['functions']} functions · {totals['classes']} classes · health {health}%"
         ),
+        "scope": {
+            "files": [f["path"] for f in files],
+            "source": "indexed-folder-only",
+        },
     }
 
 
