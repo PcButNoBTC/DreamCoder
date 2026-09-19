@@ -9,6 +9,8 @@ from typing import Any
 
 import db
 from github_sync import github_sync
+from checkpoints import create as create_checkpoint
+from security import audit
 from ai_router import AIRouter
 from models.base import CodeContext
 
@@ -176,19 +178,20 @@ class AgentRuntime:
             self._event(run,"changes.proposed",changes=[{"path":x["path"],"summary":x.get("summary","")} for x in changes])
             if not req.auto_apply:
                 run.status="awaiting_approval"; self._persist(run); return run
+            checkpoint = create_checkpoint(req.cwd, reason=f"agent:{run.goal[:80]}")
+            self._event(run, "checkpoint.created", checkpoint=checkpoint)
+            audit("agent.changes", run_id=run.id, files=[x["path"] for x in changes])
             for change in changes:
                 await self._call(run,tools,"write_file",{"path":change["path"],"content":change["content"],"change_type":change.get("change_type","PROJECT_MODIFY")})
-                sync = await github_sync.sync_file(change["path"], change["content"], f"DreamCoder agent: {run.goal[:80]}")
-                self._event(run, "github.sync", path=change["path"], result=sync)
-                if not sync.get("ok") and not sync.get("skipped"):
-                    try:
-                        from backup_manager import write_backup
-                        backup=write_backup(req.cwd,change["path"],change["content"],reason=f"github sync failed: {sync.get('error','unknown')}")
-                    except Exception as exc:
-                        backup={"ok":False,"error":str(exc)}
-                    warning={"path":change["path"],"sync_error":sync.get("error","unknown"),"sync_status":sync.get("status_code"),"backup_path":backup.get("path"),"backup_ok":backup.get("ok",False)}
-                    run.sync_warnings.append(warning)
-                    self._event(run,"github.sync.failed",**warning)
+            sync = await github_sync.sync_files_atomic(
+                [{"path":x["path"],"content":x["content"]} for x in changes],
+                message=f"DreamCoder agent: {run.goal[:80]}",
+            )
+            self._event(run, "github.sync", result=sync, files=[x["path"] for x in changes])
+            if not sync.get("ok") and not sync.get("skipped"):
+                warning={"paths":[x["path"] for x in changes],"sync_error":sync.get("error","unknown"),"sync_status":sync.get("status_code"),"backup_path":checkpoint.get("path"),"backup_ok":checkpoint.get("ok",False),"conflict":sync.get("conflict",False)}
+                run.sync_warnings.append(warning)
+                self._event(run,"github.sync.failed",**warning)
         else:
             self._event(run,"changes.none")
         run.status="validating"; self._persist(run)
