@@ -2,6 +2,7 @@ from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResu
 from .mock import MockModel
 from .ollama import OllamaModel
 from .huggingface import HuggingFaceModel
+from .openai_compatible import OpenAICompatibleModel
 
 __all__ = [
     "BaseModel",
@@ -13,4 +14,5 @@ __all__ = [
     "MockModel",
     "OllamaModel",
     "HuggingFaceModel",
+    "OpenAICompatibleModel",
 ]
