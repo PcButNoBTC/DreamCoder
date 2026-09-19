@@ -104,10 +104,14 @@ class AIRouter:
             {"id": "mock", "name": "Mock / offline", "provider": "mock", "status": "ready", "real": False}
         ]
 
-        ollama = OllamaModel(os.getenv("OLLAMA_MODEL", "llama3.1:8b"))
+        ollama_url = os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
+        ollama_requested = os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL") or os.getenv("OLLAMA_MODEL") or "llama3.1:8b"
+        ollama = OllamaModel(ollama_requested, base_url=ollama_url)
         ollama_health = await ollama.health_check()
         for tag in ollama_health.get("available_models", []):
             models.append({"id": f"ollama:{tag}", "name": tag, "provider": "ollama", "status": "ready", "real": True})
+        if ollama_health.get("status") == "ready" and not any(m["provider"] == "ollama" for m in models):
+            models.append({"id": f"ollama:{ollama_requested}", "name": ollama_requested, "provider": "ollama", "status": "ready", "real": True})
 
         if os.getenv("HF_TOKEN"):
             hf_id = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
