@@ -24,6 +24,7 @@ from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, m
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, self_heal, files_to_zip
 from github_sync import github_sync
+import workspace
 from agent.api import router as agent_router
 
 # ---------------------------------------------------------------------------
@@ -121,6 +122,12 @@ class EvolveRequest(BaseModel):
 class WatchRequest(BaseModel):
     root: str
 
+class WorkspaceRequest(BaseModel):
+    root: str
+
+class GitRequest(BaseModel):
+    args: list[str] = Field(default_factory=list)
+
 
 class SaveFileRequest(BaseModel):
     path: str
@@ -190,7 +197,7 @@ async def root():
         "ws": "/ws/complete",
         "features": [
             "suggest", "suggest-all", "stream", "evolve",
-            "sqlite-index", "file-watcher", "history",
+            "sqlite-index", "file-watcher", "history", "workspace", "git-runtime",
         ],
     }
 
@@ -561,11 +568,50 @@ async def bulk_index(req: BulkIndexRequest):
 @app.post("/api/files/save")
 async def api_save_file(req: SaveFileRequest):
     stats = router.index.index_file(req.path, req.content, req.language)
+    workspace_write = {"ok": False, "skipped": True, "reason": "No workspace configured"}
+    if workspace.root() is not None:
+        try:
+            workspace_write = workspace.write_file(req.path, req.content)
+        except Exception as exc:
+            workspace_write = {"ok": False, "error": str(exc)}
     sync = {"ok": False, "skipped": True, "reason": "disabled"}
     if req.sync_github:
         sync = await github_sync.sync_file(req.path, req.content, req.commit_message or None)
-    return {"ok": True, "stats": stats, "github": sync}
+    return {"ok": True, "stats": stats, "workspace": workspace_write, "github": sync}
 
+@app.get("/api/workspace")
+async def workspace_status():
+    return workspace.status()
+
+@app.post("/api/workspace")
+async def configure_workspace(req: WorkspaceRequest):
+    try:
+        info = workspace.set_root(req.root)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return info
+
+@app.get("/api/workspace/git/status")
+async def workspace_git_status():
+    return workspace.git(["status", "--short", "--branch"])
+
+@app.get("/api/workspace/git/log")
+async def workspace_git_log(limit: int = 20):
+    return workspace.git(["log", f"-{max(1,min(limit,100))}", "--oneline", "--decorate"])
+
+@app.get("/api/workspace/git/diff")
+async def workspace_git_diff(staged: bool = False):
+    return workspace.git(["diff", "--cached" if staged else "--"])
+
+class GitRequest(BaseModel):
+    args: list[str] = Field(default_factory=list)
+
+@app.post("/api/workspace/git")
+async def workspace_git(req: GitRequest):
+    allowed = {"status", "diff", "log", "branch", "switch", "add", "commit", "fetch", "pull", "push"}
+    if not req.args or req.args[0] not in allowed:
+        raise HTTPException(400, "Unsupported Git operation")
+    return workspace.git(req.args, timeout=120)
 @app.get("/api/github/status")
 async def github_status():
     return github_sync.status()
