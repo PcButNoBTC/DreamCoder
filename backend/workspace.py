@@ -68,7 +68,10 @@ def _safe_target(rel: str, *, allow_missing: bool = True) -> Path:
     p = root()
     if p is None: raise ValueError("No workspace configured")
     from security import safe_path
-    try:\n        return safe_path(p, rel, allow_missing=allow_missing)\n    except PermissionError as exc:\n        raise ValueError(str(exc)) from exc
+    try:
+        return safe_path(p, rel, allow_missing=allow_missing)
+    except PermissionError as exc:
+        raise ValueError(str(exc)) from exc
 
 def write_file(path: str, content: str) -> dict[str, Any]:
     target = _safe_target(path, allow_missing=True)
