@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import db
+from github_sync import github_sync
 from ai_router import AIRouter
 from models.base import CodeContext
 
@@ -100,6 +101,33 @@ class AgentRuntime:
             valid.append({"path":rel,"content":new_content,"summary":str(item.get("summary","")),"diff":diff})
         return valid[:8]
 
+    async def _plan(self, req: AgentRequest) -> list[PlanStep]:
+        from models.base import ChatContext
+        prompt = ("You are planning a safe coding task inside a project IDE. Return ONLY JSON: "
+                  "{\"steps\":[{\"id\":\"...\",\"title\":\"...\",\"purpose\":\"...\",\"tools\":[\"search\",\"read_file\",\"write_file\",\"test\"],\"requires_approval\":true}]}. "
+                  f"Goal: {req.goal}\nProject context:\n{self._project_context(req.cwd)}")
+        try:
+            result = await self.router.chat(req.model, ChatContext(message=prompt, mode="project", project_goal=db.get_setting("project_goal","") or "", project_context=self._project_context(req.cwd)), use_cache=False)
+            parsed = self._extract_json(result.content)
+            raw = parsed.get("steps", []) if isinstance(parsed, dict) else []
+            steps = []
+            for i, item in enumerate(raw[:8]):
+                if not isinstance(item, dict): continue
+                steps.append(PlanStep(id=str(item.get("id", f"step-{i+1}")), title=str(item.get("title", f"Step {i+1}")), purpose=str(item.get("purpose", "")), tools=[t for t in item.get("tools", []) if t in {"read_file","search","write_file","apply_patch","run","test","git_status","git_diff"}], requires_approval=bool(item.get("requires_approval", False))))
+            if steps: return steps
+        except Exception:
+            pass
+        return [PlanStep("inspect", "Inspect the project", "Find files relevant to the goal.", ["git_status","search"], False), PlanStep("change", "Generate the code changes", "Produce a reviewable project change.", ["read_file","write_file"], True), PlanStep("validate", "Run project tests", "Validate the change.", ["test"], False)]
+
+    async def _call(self, run: AgentRun, tools: ToolRegistry, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+        call = ToolCall(id=uuid.uuid4().hex, tool=tool, args=args, status="running")
+        run.tool_calls.append(call); self._persist(run); self._event(run, "tool.started", tool=tool, args=args)
+        try:
+            output = tools.dispatch(tool, args); call.output = output; call.status = "completed"; self._persist(run); self._event(run, "tool.completed", tool=tool, output=output)
+            return output if isinstance(output, dict) else {"output": output}
+        except Exception as exc:
+            call.status = "failed"; call.error = str(exc); self._persist(run); self._event(run, "tool.failed", tool=tool, error=str(exc))
+            return {"ok": False, "error": str(exc)}
     async def run(self, req: AgentRequest) -> AgentRun:
         run=AgentRun(id=uuid.uuid4().hex,status="planning",goal=req.goal,cwd=str(Path(req.cwd).resolve()),model=req.model)
         self._persist(run); self._event(run,"run.started",model=req.model)
@@ -132,6 +160,8 @@ class AgentRuntime:
                 run.status="awaiting_approval"; self._persist(run); return run
             for change in changes:
                 await self._call(run,tools,"write_file",{"path":change["path"],"content":change["content"]})
+                sync = await github_sync.sync_file(change["path"], change["content"], f"DreamCoder agent: {run.goal[:80]}")
+                self._event(run, "github.sync", path=change["path"], result=sync)
         else:
             self._event(run,"changes.none")
         run.status="validating"; self._persist(run)
