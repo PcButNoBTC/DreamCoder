@@ -39,7 +39,7 @@ def execute(root,cmd,network=False,timeout=300):
  except subprocess.TimeoutExpired as e:return {"ok":False,"exit_code":-1,"stdout":e.stdout or "","stderr":e.stderr or "timeout","timeout":True,"sandboxed":False}
 def diagnostics(result):
  text=(result.get("stderr") or "")+"\n"+(result.get("stdout") or "")
- return [{"file":m.group(1),"line":int(m.group(2)) if m.group(2) else None,"message":m.group(3).strip()} for m in re.finditer(r"(?m)([^:\n]+):(\\d+)?(?::\\d+)?:\\s*(?:error|Error|ERROR)[: ]*([^\n]+)",text)][:100]
+ return [{"file":m.group(1),"line":int(m.group(2)) if m.group(2) else None,"message":m.group(3).strip()} for m in re.finditer(r"(?m)([^:\n]+):(\d+)?(?::\d+)?:\s*(?:error|Error|ERROR)[: ]*([^\n]+)",text)][:100]
 def snapshot(root):
  import shutil
  backup=Path(root).parent/(Path(root).name+".dreamcoder-repair-backup")
