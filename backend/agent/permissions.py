@@ -9,7 +9,11 @@ FORBIDDEN_CHARS=set(";$"+chr(96)+"><\\\n\r")
 class PermissionError(RuntimeError): pass
 
 def unrestricted_mode()->bool:
-    return (os.getenv("DREAMCODER_AGENT_UNRESTRICTED") or str(db.get_setting("agent_unrestricted","0"))).lower() in {"1","true","yes","on"}
+    try:
+        stored=db.get_setting("agent_unrestricted","0")
+    except Exception:
+        stored="0"
+    return (os.getenv("DREAMCODER_AGENT_UNRESTRICTED") or str(stored)).lower() in {"1","true","yes","on"}
 
 def workspace_path(root:str,path:str)->Path:
     base=Path(root).expanduser().resolve()
