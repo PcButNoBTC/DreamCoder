@@ -335,6 +335,11 @@ async def git_push(body:dict={}): return git_workflow.push(body.get("remote","or
 async def git_stash(body:dict={}): return git_workflow.stash(body.get("action","push"),body.get("message",""))
 @app.post("/api/git/workflow/merge")
 async def git_merge(body:dict): return git_workflow.merge(body.get("branch",""))
+@app.get("/api/git/workflow/conflict-data")
+async def git_conflict_data(path:str):
+    try:return git_workflow.conflict_data(path)
+    except Exception as exc: raise HTTPException(400,str(exc))
+
 @app.get("/api/git/workflow/conflicts")
 async def git_conflicts(): return git_workflow.conflicts()
 
