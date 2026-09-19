@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import json
 import time
 import uuid
@@ -92,7 +93,11 @@ class AgentRuntime:
             if not isinstance(item,dict) or not item.get("path") or "content" not in item: continue
             rel=str(Path(str(item["path"])))
             if rel.startswith("..") or Path(rel).is_absolute(): continue
-            valid.append({"path":rel,"content":str(item["content"]),"summary":str(item.get("summary",""))})
+            new_content=str(item["content"])
+            target=Path(req.cwd)/rel
+            old_content=target.read_text(encoding="utf-8") if target.exists() else ""
+            diff="".join(difflib.unified_diff(old_content.splitlines(True),new_content.splitlines(True),fromfile=rel,tofile=rel))
+            valid.append({"path":rel,"content":new_content,"summary":str(item.get("summary","")),"diff":diff})
         return valid[:8]
 
     async def run(self, req: AgentRequest) -> AgentRun:
