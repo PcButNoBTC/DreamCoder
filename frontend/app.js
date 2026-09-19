@@ -28,6 +28,84 @@ function syncStatus() {
 }
 
 function setStatus(text) { statusEl.textContent = text; }
+
+async function refreshModelHealth() {
+  const selected = modelSelect?.value;
+  const badge = document.getElementById("modelStatus");
+  if (!selected) return;
+  if (badge) {
+    badge.textContent = "checking";
+    badge.dataset.status = "checking";
+  }
+  try {
+    const data = await api("/api/health?model=" + encodeURIComponent(selected));
+    const m = data.model || {};
+    const status = m.status || "unknown";
+    const backend = m.backend || (selected === "mock" ? "mock" : "");
+    const label = status === "ready" ? "online" : status.replace(/-/g, " ");
+    if (badge) {
+      badge.textContent = label + (backend ? " · " + backend : "");
+      badge.dataset.status = status;
+      badge.title = JSON.stringify(m);
+    }
+    if (modelCurrent) modelCurrent.textContent = selected;
+  } catch (err) {
+    if (badge) {
+      badge.textContent = "unavailable";
+      badge.dataset.status = "error";
+      badge.title = err.message;
+    }
+  }
+}
+
+async function loadAvailableModels() {
+  if (!modelSelect) return;
+  try {
+    const data = await api("/api/models");
+    const models = Array.isArray(data.models) ? data.models : [];
+    const previous = localStorage.getItem("dc_model");
+    modelSelect.innerHTML = "";
+    const groups = new Map();
+    for (const model of models) {
+      const provider = model.provider || "other";
+      if (!groups.has(provider)) {
+        const group = document.createElement("optgroup");
+        group.label = provider === "mock" ? "Offline / development" : provider;
+        groups.set(provider, group);
+        modelSelect.appendChild(group);
+      }
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.name + (model.real ? "" : " (mock)");
+      option.dataset.status = model.status || "unknown";
+      option.dataset.real = model.real ? "true" : "false";
+      groups.get(provider).appendChild(option);
+    }
+    if (!models.length) {
+      const option = document.createElement("option");
+      option.value = "mock";
+      option.textContent = "Mock / offline";
+      modelSelect.appendChild(option);
+    }
+    const validPrevious = [...modelSelect.options].some((o) => o.value === previous);
+    const firstReal = [...modelSelect.options].find((o) => o.dataset.real === "true");
+    modelSelect.value = validPrevious ? previous : (firstReal?.value || "mock");
+    modelCurrent.textContent = modelSelect.value;
+    localStorage.setItem("dc_model", modelSelect.value);
+    await refreshModelHealth();
+  } catch (err) {
+    // Keep the static selector as a visible fallback, but make its status explicit.
+    if (!modelSelect.options.length) {
+      const option = document.createElement("option");
+      option.value = "mock";
+      option.textContent = "Mock / offline";
+      modelSelect.appendChild(option);
+    }
+    modelCurrent.textContent = modelSelect.value;
+    await refreshModelHealth();
+  }
+}
+
 function setTerminal(text) {
   terminal.textContent = text;
   terminal.scrollTop = terminal.scrollHeight;
@@ -151,9 +229,11 @@ async function getSuggestions() {
 }
 document.getElementById("suggestBtn").onclick = getSuggestions;
 
-modelSelect.onchange = () => {
+modelSelect.onchange = async () => {
   modelCurrent.textContent = modelSelect.value;
+  localStorage.setItem("dc_model", modelSelect.value);
   setStatus(`Model: ${modelSelect.value}`);
+  await refreshModelHealth();
   toast(`Model → ${modelSelect.value}`, "info");
 };
 
@@ -2452,5 +2532,6 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   if (st && (!st.textContent || st.textContent === "Ready")) {
     /* keep */
   }
+  loadAvailableModels().catch(() => {});
   console.log("DreamCoder UI ready");
 })();
