@@ -3,7 +3,7 @@ import os,re,shlex
 from pathlib import Path
 
 SAFE_COMMANDS={"python","python3","pytest","pip","pip3","git","npm","npx","node","yarn","pnpm","uv","ruff","mypy","pyright","go","cargo","rustc","cmake","make","gcc","g++","clang","dotnet","java","javac","mvn","gradle","ls","cat","echo","pwd","which","where","dir","type","find","grep","rg","head","tail","wc","sort","uniq","diff"}
-FORBIDDEN_CHARS=set(";|$"+chr(96)+"><\\\n\r")
+FORBIDDEN_CHARS=set(";$"+chr(96)+"><\\\n\r")
 
 class PermissionError(RuntimeError): pass
 
