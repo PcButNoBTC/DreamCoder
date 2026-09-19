@@ -262,7 +262,35 @@ async def production_diagnostics():
 async def github_oauth_config():
     return {"configured":github_auth.configured()}
 
-@app.get("/api/github/oauth/start")
+
+@app.get("/api/github/me")
+async def github_me(): return await github_auth.user()
+@app.get("/api/github/oauth/config")
+async def github_oauth_config(): return {"configured":github_auth.configured(),"app_configured":github_auth.app_configured()}
+@app.get("/api/github/repositories")
+async def github_repositories(): return await github_auth.repositories()
+@app.post("/api/github/disconnect")
+async def github_disconnect(): return github_auth.disconnect()
+@app.post("/api/github/select-repository")
+async def github_select_repository(body:dict):
+    repo=str(body.get("repo","")).strip(); branch=str(body.get("branch","main")).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repo): raise HTTPException(400,"Invalid repository")
+    db.set_setting("github_repo",repo); db.set_setting("github_branch",branch); github_sync.repo=repo; github_sync.branch=branch; return {"ok":True,"repo":repo,"branch":branch}
+@app.get("/api/git/workflow/status")
+async def git_workflow_status(): return git_workflow.status()
+@app.get("/api/git/workflow/branches")
+async def git_workflow_branches(): return git_workflow.branches()
+@app.get("/api/workspace/checkpoints")
+async def workspace_checkpoints(): return {"checkpoints":list_checkpoints(str(workspace.root())) if workspace.root() else []}
+@app.post("/api/workspace/checkpoint")
+async def workspace_checkpoint(body:dict):
+    if not workspace.root(): raise HTTPException(400,"No workspace")
+    return create_checkpoint(str(workspace.root()),str(body.get("reason","manual")))
+@app.post("/api/workspace/checkpoint/restore")
+async def workspace_checkpoint_restore(body:dict):
+    if not workspace.root(): raise HTTPException(400,"No workspace")
+    return restore_checkpoint(str(workspace.root()),str(body.get("path","")))
+\n@app.get("/api/github/oauth/start")
 async def github_oauth_start():
     if not github_auth.configured(): raise HTTPException(503,"GitHub OAuth is not configured")
     from fastapi.responses import RedirectResponse
