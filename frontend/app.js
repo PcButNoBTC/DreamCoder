@@ -1931,7 +1931,7 @@ function renderGenerated(data) {
   if (applyRow) applyRow.style.display = data.files?.length ? "flex" : "none";
 }
 
-async function loadGeneratedIntoWorkspace() {
+async async function loadGeneratedIntoWorkspace() {
   if (!lastGenerated?.files?.length) {
     toast("Generate a project first", "info");
     return;
@@ -1942,12 +1942,7 @@ async function loadGeneratedIntoWorkspace() {
   try {
     const result = await api("/api/ai/generate-project/build", {
       method: "POST",
-      body: JSON.stringify({
-        files: lastGenerated.files,
-        name: lastGenerated.name || "generated-app",
-        stack: lastGenerated.stack || {},
-        sync_github: true,
-      }),
+      body: JSON.stringify({ files: lastGenerated.files, name: lastGenerated.name || "generated-app", stack: lastGenerated.stack || {}, sync_github: true }),
     });
     lastGenerated.build = result;
     const files = lastGenerated.files;
