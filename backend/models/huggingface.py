@@ -16,6 +16,10 @@ from typing import Any, Optional
 
 from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
 try:
+    from provider_runtime import runtime as provider_runtime
+except Exception:
+    provider_runtime=None
+try:
     from quota_tracker import record_response as _record_quota
 except Exception:
     def _record_quota(headers, status): pass
@@ -172,7 +176,7 @@ class HuggingFaceModel(BaseModel):
                     try:
                         data=json.loads(payload)
                         token=data.get("token",{}).get("text") if isinstance(data,dict) else None
-                        if token: yield token
+                        if token:\n                            if provider_runtime: provider_runtime.record_usage("huggingface:"+self.model_id,0,max(1,len(token.split())))\n                            yield token
                         elif isinstance(data,dict) and data.get("generated_text"): yield data["generated_text"]
                     except Exception: continue
 
