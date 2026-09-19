@@ -709,7 +709,7 @@ async function sendChat(msg) {
       method: "POST",
       body: JSON.stringify({ message: text, model: modelSelect.value }),
     });
-    appendChat("assistant", (data.model ? `[${data.model}]\n` : "") + (data.content || "(empty reply)"));
+    appendChat("assistant", (data.model ? `[${data.model}${data.backend ? ` · ${data.backend}` : ""}]\n` : "") + (data.content || "(empty reply)"));
     setStatus("Ready");
     // If analysis payload, also render analysis card
     if (data.analysis) renderAnalysis(data.analysis);
