@@ -305,6 +305,23 @@ Type a command and press Enter (runs on the machine hosting the backend).
     </main>
   </div>
 
+  <button id="analysisTab" class="analysis-tab" type="button" aria-expanded="false" title="Folder Analysis">
+    <span>◎</span><span>Folder Analysis</span><strong id="analysisTabHealth">—</strong>
+  </button>
+  <div id="analysisBackdrop" class="analysis-backdrop" hidden></div>
+  <aside id="analysisDrawer" class="analysis-drawer" aria-label="Folder analysis" aria-hidden="true">
+    <div class="analysis-drawer-head">
+      <div><div class="analysis-drawer-title">◎ Folder Analysis</div><div id="analysisScope" class="muted">Current indexed folder only</div></div>
+      <button id="analysisClose" class="icon-btn" type="button" title="Close">×</button>
+    </div>
+    <div class="analysis-drawer-status">
+      <span id="analysisHealthDrawer" class="health">—</span>
+      <span id="analysisModelDrawer" class="badge">MODEL</span>
+    </div>
+    <div id="analysisSummaryDrawer" class="analysis-summary"></div>
+    <div id="analysisProjectType" class="analysis-project-type"></div>
+    <div id="analysisBodyDrawer" class="analysis-drawer-body"></div>
+  </aside>
   <div id="commandPalette" class="cmd-palette" style="display:none">
     <input id="cmdInput" class="cmd-input" placeholder="Type a command… (theme peach, particles on, analyze, generate…)" />
     <div id="cmdResults" class="cmd-results"></div>
