@@ -15,7 +15,8 @@ def redact(text:str)->str:
     return out
 def safe_path(root:str|Path, relative:str, allow_missing=True)->Path:
     base=Path(root).expanduser().resolve(); rel=Path(relative)
-    if rel.is_absolute() or ".." in rel.parts: raise PermissionError("path escapes workspace")
+    raw=str(relative).replace("\\\\","/")
+    if re.match(r"^[A-Za-z]:/",raw) or raw.startswith("//") or rel.is_absolute() or ".." in rel.parts: raise PermissionError("path escapes workspace")
     target=(base/rel).resolve(strict=not allow_missing)
     if target!=base and base not in target.parents: raise PermissionError("path escapes workspace")
     if target.is_symlink(): raise PermissionError("symlink targets are not allowed")
