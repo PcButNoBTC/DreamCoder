@@ -38,12 +38,13 @@ class HuggingFaceModel(BaseModel):
         if self.use_api and self.api_token:
             return await self._via_api(context, start)
         else:
-            # Fall back to mock so the UI never breaks
-            from .mock import MockModel
-            fallback = MockModel(display_name=f"HF({self.model_id}) [mock]")
-            result = await fallback.complete(context)
-            result.model = f"HuggingFace/{self.model_id} (mock – set HF_TOKEN for real API)"
-            return result
+            return InferenceResult(
+                suggestions=[],
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                model=f"HuggingFace/{self.model_id}",
+                cached=False,
+                health={"status": "token-missing", "backend": "huggingface", "model_id": self.model_id},
+            )
 
     async def _via_api(self, context: CodeContext, start: float) -> InferenceResult:
         import httpx
@@ -70,11 +71,13 @@ class HuggingFaceModel(BaseModel):
                 data = resp.json()
                 raw = data[0]["generated_text"] if isinstance(data, list) else str(data)
         except Exception as exc:
-            from .mock import MockModel
-            fallback = MockModel(display_name=f"HF({self.model_id})")
-            result = await fallback.complete(context)
-            result.model = f"HuggingFace/{self.model_id} – API error, mock used"
-            return result
+            return InferenceResult(
+                suggestions=[],
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                model=f"HuggingFace/{self.model_id}",
+                cached=False,
+                health={"status": "error", "backend": "huggingface-api", "model_id": self.model_id, "error": str(exc)},
+            )
 
         suggestions = [
             Suggestion(
