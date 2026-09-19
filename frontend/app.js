@@ -195,6 +195,7 @@ async function runCode() {
   }
 }
 document.getElementById("runBtn").onclick = runCode;
+document.getElementById("agentBtn")?.addEventListener("click", runProjectAgent);
 async function runProjectAgent() {
   const goal = prompt("What should DreamCoder change in this project?", document.getElementById("projectGoal")?.value || "");
   if (!goal?.trim()) return;
