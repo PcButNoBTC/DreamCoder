@@ -1429,6 +1429,28 @@ async function ingestFiles(rawList, rootName, replaceExisting = false) {
   }
 }
 
+async function openNativeWorkspace(root) {
+  try {
+    const data = await api("/api/workspace", { method: "POST", body: JSON.stringify({ root }) });
+    await api("/api/watch/start", { method: "POST", body: JSON.stringify({ root }) });
+    setStatus("Workspace connected");
+    toast("Connected " + data.root, "success");
+    await refreshWorkspaceGitStatus();
+    await refreshMonitor();
+    const files = await api("/api/files");
+    if (Array.isArray(files)) {
+      fileBuffers = {};
+      files.forEach(f => { if (f.path && f.content != null) fileBuffers[f.path] = f.content; });
+      renderFileTree(Object.keys(fileBuffers));
+      const first = Object.keys(fileBuffers)[0];
+      if (first) openPath(first);
+    }
+  } catch (err) {
+    toast("Workspace connection failed: " + err.message, "error");
+    setStatus("Workspace error");
+  }
+}
+
 function renderFileTree(paths) {
   const tree = document.getElementById("fileTree");
   if (!tree) return;
@@ -1531,8 +1553,13 @@ if (dropZone) {
   });
 }
 
-document.getElementById("browseFolderBtn")?.addEventListener("click", (e) => {
+document.getElementById("browseFolderBtn")?.addEventListener("click", async (e) => {
   e.stopPropagation();
+  if (window.dreamcoderDesktop?.chooseFolder) {
+    const root = await window.dreamcoderDesktop.chooseFolder();
+    if (root) await openNativeWorkspace(root);
+    return;
+  }
   folderInput?.click();
 });
 document.getElementById("browseFilesBtn")?.addEventListener("click", (e) => {
