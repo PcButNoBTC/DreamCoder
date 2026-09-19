@@ -32,6 +32,8 @@ from project_memory import memory
 from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
 from security import capabilities
 from credentials import status as credential_status
+import github_auth, git_workflow
+from terminal_session import SESSIONS, create as create_terminal_session
 
 # ---------------------------------------------------------------------------
 app = FastAPI(
@@ -231,6 +233,105 @@ async def production_readiness():
 @app.get("/api/production/diagnostics")
 async def production_diagnostics():
     return diagnostics(str(workspace.root()) if workspace.root() else None)
+
+@app.get("/api/github/oauth/config")
+async def github_oauth_config():
+    return {"configured":github_auth.configured()}
+
+@app.get("/api/github/oauth/start")
+async def github_oauth_start():
+    if not github_auth.configured(): raise HTTPException(503,"GitHub OAuth is not configured")
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(github_auth.start_url())
+
+@app.get("/api/github/oauth/callback")
+async def github_oauth_callback(code:str="",state:str=""):
+    from fastapi.responses import HTMLResponse
+    if not github_auth.verify_state(state): return HTMLResponse("<h3>DreamCoder GitHub sign-in failed: invalid state.</h3>",status_code=400)
+    try:
+        u=await github_auth.exchange(code)
+        return HTMLResponse("<script>window.close()</script><h3>DreamCoder connected to GitHub. You can close this window.</h3>")
+    except Exception as exc:
+        return HTMLResponse("<h3>GitHub sign-in failed.</h3><pre>"+escape_html(str(exc))+"</pre>",status_code=502)
+
+@app.get("/api/github/me")
+async def github_me(): return await github_auth.user()
+
+@app.get("/api/github/installations")
+async def github_installations(): return await github_auth.installations()
+
+@app.get("/api/github/repositories")
+async def github_repositories(installation_id:int|None=None): return await github_auth.repositories(installation_id)
+
+@app.post("/api/github/disconnect")
+async def github_disconnect(): return github_auth.disconnect()
+
+@app.post("/api/github/select-repository")
+async def github_select_repository(body:dict):
+    repo=body.get("repo","")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repo): raise HTTPException(400,"invalid repository")
+    db.set_setting("github_repo",repo); os.environ["DREAMCODER_GITHUB_REPO"]=repo
+    github_sync.repo=repo
+    if body.get("branch"): db.set_setting("github_branch",body["branch"]); os.environ["DREAMCODER_GITHUB_BRANCH"]=body["branch"]; github_sync.branch=body["branch"]
+    return github_sync.status()
+
+@app.get("/api/git/workflow/status")
+async def git_workflow_status(): return git_workflow.status()
+@app.get("/api/git/workflow/branches")
+async def git_workflow_branches(): return git_workflow.branches()
+@app.post("/api/git/workflow/stage")
+async def git_stage(body:dict): return git_workflow.stage(body.get("paths",[]))
+@app.post("/api/git/workflow/unstage")
+async def git_unstage(body:dict): return git_workflow.unstage(body.get("paths",[]))
+@app.post("/api/git/workflow/commit")
+async def git_commit(body:dict): return git_workflow.commit(body.get("message","DreamCoder commit"))
+@app.post("/api/git/workflow/branch")
+async def git_branch(body:dict): return git_workflow.create_branch(body.get("name",""),True)
+@app.post("/api/git/workflow/switch")
+async def git_switch(body:dict): return git_workflow.switch_branch(body.get("name",""))
+@app.post("/api/git/workflow/fetch")
+async def git_fetch(body:dict={}): return git_workflow.fetch(body.get("remote","origin"))
+@app.post("/api/git/workflow/pull")
+async def git_pull(body:dict={}): return git_workflow.pull(body.get("remote","origin"),body.get("branch",""))
+@app.post("/api/git/workflow/push")
+async def git_push(body:dict={}): return git_workflow.push(body.get("remote","origin"),body.get("branch",""))
+@app.post("/api/git/workflow/stash")
+async def git_stash(body:dict={}): return git_workflow.stash(body.get("action","push"),body.get("message",""))
+@app.post("/api/git/workflow/merge")
+async def git_merge(body:dict): return git_workflow.merge(body.get("branch",""))
+@app.get("/api/git/workflow/conflicts")
+async def git_conflicts(): return git_workflow.conflicts()
+
+@app.post("/api/terminal/session")
+async def terminal_session_start(req:TerminalRequest):
+    cwd=(req.cwd or str(workspace.root() or Path.cwd()))
+    root=workspace.root()
+    if root:
+        candidate=Path(cwd).expanduser().resolve()
+        if candidate!=root and root not in candidate.parents: raise HTTPException(400,"cwd outside workspace")
+        cwd=str(candidate)
+    s=await create_terminal_session(req.command,cwd)
+    return {"id":s.id,"pid":s.proc.pid if s.proc else None,"command":s.command,"cwd":s.cwd}
+
+@app.websocket("/ws/terminal/{session_id}")
+async def terminal_socket(ws:WebSocket,session_id:str):
+    await ws.accept(); s=SESSIONS.get(session_id)
+    if not s: await ws.close(code=1008); return
+    async def pump():
+        while True:
+            data=await s.queue.get(); await ws.send_text(data)
+    task=asyncio.create_task(pump())
+    try:
+        while True:
+            msg=json.loads(await ws.receive_text())
+            op=msg.get("op","write")
+            if op=="write": await s.write(msg.get("data",""))
+            elif op=="resize": await s.resize(int(msg.get("cols",120)),int(msg.get("rows",30)))
+            elif op=="stop": await s.stop()
+            elif op=="kill": await s.kill()
+            elif op=="signal" and msg.get("signal")=="SIGINT": await s.write("\x03")
+    except WebSocketDisconnect: pass
+    finally: task.cancel()
 
 @app.get("/api/credentials/status")
 async def credentials_status():
