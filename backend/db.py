@@ -99,6 +99,15 @@ def upsert_file(path: str, content: str, language: str = "python") -> None:
     conn.close()
 
 
+def clear_files() -> None:
+    """Clear the indexed project files and symbols, preserving history/settings."""
+    conn = get_conn()
+    conn.execute("DELETE FROM symbols")
+    conn.execute("DELETE FROM files")
+    conn.commit()
+    conn.close()
+
+
 def delete_file(path: str) -> None:
     conn = get_conn()
     conn.execute("DELETE FROM symbols WHERE file=?", (path,))
