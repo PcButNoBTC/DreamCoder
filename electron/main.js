@@ -68,13 +68,23 @@ app.whenReady().then(() => {
   startBackend();
   waitForBackend();
   if (app.isPackaged && process.env.DREAMCODER_DISABLE_UPDATES !== "1") {
-    autoUpdater.checkForUpdatesAndNotify().catch(err => console.warn("update check failed", err));
+    autoUpdater.autoDownload = false;
+    autoUpdater.on("update-available", info => {
+      if (mainWindow) mainWindow.webContents.send("dreamcoder:update-available", {version:info.version});
+      autoUpdater.downloadUpdate().catch(err => console.warn("update download failed", err));
+    });
+    autoUpdater.on("update-downloaded", info => {
+      if (mainWindow) mainWindow.webContents.send("dreamcoder:update-ready", {version:info.version});
+    });
+    autoUpdater.checkForUpdates().catch(err => console.warn("update check failed", err));
   }
   app.on("second-instance", () => {
     if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
   });
   app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) waitForBackend(); });
 });
+
+ipcMain.handle("dreamcoder:install-update", async () => { autoUpdater.quitAndInstall(false,true); return {ok:true}; });
 
 app.on("before-quit", () => {
   if (backendProc) { try { backendProc.kill(); } catch (_) {} backendProc = null; }
