@@ -8,12 +8,13 @@ Then set DREAMCODER_MODEL=ollama:qwen2.5-coder:7b
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any, Optional
 
 import httpx
 
-from .base import BaseModel, CodeContext, InferenceResult, Suggestion
+from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
 
 
 class OllamaModel(BaseModel):
@@ -27,7 +28,7 @@ class OllamaModel(BaseModel):
         timeout: float = 60.0,
     ):
         self.model_name = model_name
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (os.getenv("OLLAMA_BASE_URL") or base_url).rstrip("/")
         self.timeout = timeout
 
     async def complete(self, context: CodeContext) -> InferenceResult:
@@ -49,12 +50,13 @@ class OllamaModel(BaseModel):
                 data = resp.json()
                 raw = data.get("response", "")
         except Exception as exc:
-            # Graceful fallback so the UI never breaks
-            from .mock import MockModel
-            fallback = MockModel(display_name=f"Ollama({self.model_name}) [fallback]")
-            result = await fallback.complete(context)
-            result.model = f"Ollama({self.model_name}) – offline, using mock"
-            return result
+            return InferenceResult(
+                suggestions=[],
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                model=f"Ollama/{self.model_name}",
+                cached=False,
+                health={"status": "error", "backend": "ollama", "requested": self.model_name, "error": str(exc)},
+            )
 
         suggestions = self._parse_suggestions(raw)
         latency = int((time.perf_counter() - start) * 1000)
@@ -73,6 +75,31 @@ class OllamaModel(BaseModel):
             ],
             health={"score": 91, "backend": "ollama"},
         )
+
+    async def chat(self, context: ChatContext) -> ChatResult:
+        start = time.perf_counter()
+        system = (
+            "You are the selected DreamCoder coding assistant. Answer the user's request directly. "
+            "Do not claim to have changed files or run commands unless the tool system actually did so."
+        )
+        if context.project_context:
+            system += "\\n\\nProject context:\\n" + (context.project_context or "(no project context available)")
+            if context.project_goal:
+                system += "\\nProject goal: " + context.project_goal
+        history = "\\n".join(f"{m.get('role','user')}: {m.get('content','')}" for m in context.history[-8:])
+        prompt = system + ("\\n\\nConversation:\\n" + history if history else "") + "\\n\\nuser: " + context.message + "\\nassistant:"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": self.model_name, "prompt": prompt, "stream": False,
+                          "options": {"temperature": 0.3, "num_predict": 1200}},
+                )
+                resp.raise_for_status()
+                raw = resp.json().get("response", "").strip()
+                return ChatResult(content=raw or "(empty model response)", latency_ms=int((time.perf_counter()-start)*1000), model=f"Ollama/{self.model_name}", backend="ollama")
+        except Exception as exc:
+            return ChatResult(content=f"Selected model Ollama/{self.model_name} is unavailable: {exc}", latency_ms=int((time.perf_counter()-start)*1000), model=f"Ollama/{self.model_name}", backend="ollama", cached=False)
 
     async def health_check(self) -> dict[str, Any]:
         try:
