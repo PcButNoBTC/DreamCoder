@@ -2639,7 +2639,8 @@ function renderOllamaModels(data){
   (data.models||[]).forEach(m=>{const row=document.createElement("button");row.className="hf-item";row.innerHTML='<span class="hf-id">'+escapeHtml(m.name)+(m.name===recommended?" ★":"")+'</span><span class="hf-meta">'+escapeHtml(m.parameter_size||"?")+" · "+escapeHtml(m.quantization||"?")+" · score "+m.score+'</span>';row.onclick=()=>setPrimaryOllama(data.url,m.name);box.appendChild(row);});
 }
 async function setPrimaryOllama(url,model){try{await api("/api/ollama/primary",{method:"POST",body:JSON.stringify({url,model})});toast("Primary set: "+model,"success");refreshQuota();}catch(err){toast("Could not set primary","error");}}
-\n/* ========== Vision / image analysis ========== */
+
+/* ========== Vision / image analysis ========== */
 let visionDataUrl = "";
 
 function setVisionPreview(dataUrl) {
