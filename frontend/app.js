@@ -195,6 +195,59 @@ async function runCode() {
   }
 }
 document.getElementById("runBtn").onclick = runCode;
+async function runProjectAgent() {
+  const goal = prompt("What should DreamCoder change in this project?", document.getElementById("projectGoal")?.value || "");
+  if (!goal?.trim()) return;
+  const model = modelSelect.value;
+  setStatus("Agent planning…");
+  setTerminal("$ dreamcoder agent\n\nPlanning with " + model + "…");
+  try {
+    const data = await api("/api/agent/run", {
+      method: "POST",
+      body: JSON.stringify({ goal: goal.trim(), cwd: "", model, auto_apply: false }),
+    });
+    renderAgentRun(data);
+  } catch (err) {
+    setStatus("Agent error");
+    toast("Agent failed: " + err.message, "error");
+  }
+}
+
+function renderAgentRun(data) {
+  const steps = (data.plan || []).map((s, i) => `${i + 1}. ${escapeHtml(s.title)}`).join("<br>");
+  const changes = (data.changes || []).filter(c => c && c.path).map(c => `<div class="agent-change"><strong>${escapeHtml(c.path)}</strong><span>${escapeHtml(c.summary || "proposed change")}</span></div>`).join("");
+  const body = `
+    <div class="muted">Model: ${escapeHtml(data.model || modelSelect.value)} · Status: ${escapeHtml(data.status || "unknown")}</div>
+    <div class="analysis-section">Plan</div><div class="analysis-model-note">${steps || "No plan returned."}</div>
+    ${changes ? '<div class="analysis-section">Proposed changes</div>' + changes : ""}
+    ${data.validation?.stderr ? '<div class="analysis-section">Validation</div><pre class="analysis-diff">' + escapeHtml(data.validation.stderr) + '</pre>' : ""}
+  `;
+  const needsChangesApproval = data.status === "awaiting_approval" && changes;
+  showModal({
+    title: needsChangesApproval ? "Review model changes" : "Project agent plan",
+    bodyHtml: body,
+    applyLabel: needsChangesApproval ? "Apply changes" : "Generate changes",
+    onApply: async () => {
+      try {
+        const next = await api("/api/agent/runs/" + encodeURIComponent(data.id) + "/approve", {
+          method: "POST",
+          body: JSON.stringify({ auto_apply: Boolean(needsChangesApproval) }),
+        });
+        renderAgentRun(next);
+        if (next.status === "completed") {
+          setStatus("Ready");
+          setTerminal("$ dreamcoder agent\n\n✓ Agent completed and tests passed.\n" + ((next.validation && next.validation.stdout) || ""));
+          toast("Agent completed", "success");
+        } else {
+          setStatus("Agent: " + next.status);
+        }
+      } catch (err) {
+        toast("Agent approval failed: " + err.message, "error");
+      }
+    },
+  });
+}
+
 
 async function getSuggestions() {
   const btn = document.getElementById("suggestBtn");
@@ -2101,7 +2154,7 @@ const COMMANDS = [
   { label: "Run code", run: () => runCode() },
   { label: "Suggest", run: () => getSuggestions() },
   { label: "Ask all models", run: () => askAllModels() },
-  { label: "Analyze folder", run: () => runFolderAnalysis() },
+  { label: "Analyze folder", run: () => runFolderAnalysis() },\n  { label: "Run project agent", run: () => runProjectAgent() },
   { label: "Stream completion", run: () => streamComplete() },
   { label: "Open Debug page", run: () => (window.location.href = "debug.html") },
   { label: "Undo last patch", run: () => undoLast() },
