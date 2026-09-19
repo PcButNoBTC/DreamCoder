@@ -164,7 +164,73 @@ function showModal({ title, bodyHtml, onApply, applyLabel = "Apply" }) {
   root.querySelector("#modalApply").onclick = () => { onApply?.(); close(); };
 }
 
-editor.addEventListener("input", () => { updateLines(); syncStatus(); setStatus("Modified"); });
+let githubSaveTimer = null;
+let githubSyncConfigured = false;
+
+function setGithubSyncState(label, state = "") {
+  const el = document.getElementById("githubSyncState");
+  if (!el) return;
+  el.textContent = "GitHub: " + label;
+  el.dataset.state = state;
+}
+
+async function refreshGithubSyncStatus() {
+  try {
+    const data = await api("/api/github/status");
+    githubSyncConfigured = Boolean(data.configured);
+    if (data.configured) setGithubSyncState(data.repo + " · " + data.branch, "ready");
+    else setGithubSyncState("not configured", "off");
+  } catch (_) {
+    githubSyncConfigured = false;
+    setGithubSyncState("backend offline", "error");
+  }
+}
+
+async function saveCurrentFileLive() {
+  if (!currentPath) return;
+  const content = editor.value;
+  fileBuffers[currentPath] = content;
+  setGithubSyncState(githubSyncConfigured ? "syncing…" : "local only", githubSyncConfigured ? "syncing" : "off");
+  try {
+    const data = await api("/api/files/save", {
+      method: "POST",
+      body: JSON.stringify({
+        path: currentPath,
+        content,
+        language: langFromPath(currentPath),
+        sync_github: true,
+        commit_message: "DreamCoder live edit: " + currentPath,
+      }),
+    });
+    const gh = data.github || {};
+    if (gh.ok) {
+      setGithubSyncState("synced ✓", "ready");
+      setStatus("Saved · GitHub synced");
+    } else if (gh.skipped) {
+      setGithubSyncState("local only", "off");
+      setStatus("Saved locally");
+    } else {
+      setGithubSyncState("sync error", "error");
+      setStatus("Saved · GitHub sync failed");
+      toast("Local save succeeded, but GitHub sync failed", "error");
+    }
+  } catch (err) {
+    setGithubSyncState("sync error", "error");
+    setStatus("Local edit pending");
+  }
+}
+
+function scheduleLiveSave() {
+  clearTimeout(githubSaveTimer);
+  githubSaveTimer = setTimeout(saveCurrentFileLive, 900);
+}
+
+editor.addEventListener("input", () => {
+  updateLines();
+  syncStatus();
+  setStatus("Modified · syncing…");
+  scheduleLiveSave();
+};
 editor.addEventListener("click", syncStatus);
 editor.addEventListener("keyup", syncStatus);
 updateLines();
@@ -1066,6 +1132,7 @@ if (analyzeBtn) analyzeBtn.onclick = runFolderAnalysis;
 
 /* boot extras */
 loadProjectContext();
+refreshGithubSyncStatus();
 refreshMonitor();
 setInterval(refreshMonitor, 45000); // keep monitor fresh
 
