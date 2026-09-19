@@ -71,7 +71,8 @@ class HuggingFaceModel(BaseModel):
                     headers=headers,
                     json=payload,
                 )
-                _record_quota(dict(resp.headers), resp.status_code)\n                resp.raise_for_status()
+                _record_quota(dict(resp.headers), resp.status_code)
+                resp.raise_for_status()
                 data = resp.json()
                 raw = data[0]["generated_text"] if isinstance(data, list) else str(data)
         except Exception as exc:
