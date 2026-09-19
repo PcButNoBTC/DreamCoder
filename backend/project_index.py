@@ -23,6 +23,7 @@ class ProjectIndex:
         db.init_db()
 
     def index_file(self, path: str, content: str, language: str = "python") -> dict[str, Any]:
+        # upsert_file clears the previous symbol snapshot before parsing the new content.
         db.upsert_file(path, content, language)
         symbols = self._extract_python_symbols(path, content) if language == "python" else []
         db.insert_symbols(
