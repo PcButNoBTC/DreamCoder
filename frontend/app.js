@@ -1931,34 +1931,54 @@ function renderGenerated(data) {
   if (applyRow) applyRow.style.display = data.files?.length ? "flex" : "none";
 }
 
-function loadGeneratedIntoWorkspace() {
+async function loadGeneratedIntoWorkspace() {
   if (!lastGenerated?.files?.length) {
     toast("Generate a project first", "info");
     return;
   }
-  playRefreshAnimation("Loading project…");
-  const files = lastGenerated.files;
-  files.forEach((f) => {
-    fileBuffers[f.path] = f.content || "";
-  });
-  renderFileTree(Object.keys(fileBuffers));
-  document.getElementById("projectNameLabel").textContent = `◈ ${lastGenerated.name || "generated"}`;
-  const first = files[0];
-  if (first) openPath(first.path);
-  // bulk index
-  api("/api/files/bulk", {
-    method: "POST",
-    body: JSON.stringify({
-      files: files.map((f) => ({
-        path: f.path,
-        content: f.content || "",
-        language: langFromPath(f.path),
-      })),
-      root_name: lastGenerated.name || "generated",
-    }),
-  }).catch(() => {});
-  toast(`Loaded ${files.length} files into workspace`, "success");
-  refreshMonitor();
+  playRefreshAnimation("Writing + building project…");
+  setStatus("Building generated project…");
+  setTerminal("$ dreamcoder generate --build\\n\\nWriting generated files to the connected workspace…");
+  try {
+    const result = await api("/api/ai/generate-project/build", {
+      method: "POST",
+      body: JSON.stringify({
+        files: lastGenerated.files,
+        name: lastGenerated.name || "generated-app",
+        stack: lastGenerated.stack || {},
+        sync_github: true,
+      }),
+    });
+    lastGenerated.build = result;
+    const files = lastGenerated.files;
+    files.forEach((f) => { fileBuffers[f.path] = f.content || ""; });
+    renderFileTree(Object.keys(fileBuffers));
+    document.getElementById("projectNameLabel").textContent = `◈ ${lastGenerated.name || "generated"}`;
+    const first = files[0];
+    if (first) openPath(first.path);
+    const v = result.validation || {};
+    setTerminal(
+      `$ dreamcoder generate --build\\n\\n` +
+      `Project: ${result.name}\\n` +
+      `Files written: ${result.file_count}\\n` +
+      `Build: ${result.build_command || "materialized only"}\\n` +
+      `${result.ok ? "✓ BUILD PASSED" : "✗ BUILD FAILED"}\\n\\n` +
+      `${v.stdout || ""}${v.stderr || ""}${v.error || ""}`
+    );
+    if (result.ok) {
+      setStatus("Build passed");
+      toast(`Built ${result.name} successfully`, "success");
+    } else {
+      setStatus("Build failed");
+      toast("Project was written, but the build failed. Use the validation output to self-heal.", "error", 5000);
+    }
+    refreshMonitor();
+    refreshWorkspaceGitStatus();
+  } catch (err) {
+    setTerminal(`$ dreamcoder generate --build\\n\\n✗ ${err.message}`);
+    setStatus("Build failed");
+    toast("Build/load failed: " + err.message, "error");
+  }
 }
 
 document.getElementById("generateBtn")?.addEventListener("click", () => {
