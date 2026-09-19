@@ -1256,7 +1256,7 @@ async def api_generate_project_build(req: GenerateProjectBuildRequest):
     }
     command = build_commands.get(lang)
     if command:
-        validation = sandbox_run(str(workspace.root()),command,timeout=300,network=os.getenv("DREAMCODER_AGENT_NETWORK","0")=="1") if sandbox_available() else workspace.run_shell(command,timeout=300)
+        validation = sandbox_run(str(workspace.root()),command,timeout=300,network=os.getenv("DREAMCODER_AGENT_NETWORK","0")=="1") if sandbox_available() else {"ok":False,"exit_code":-1,"stdout":"","stderr":"Sandbox runtime required for generated-code validation","sandboxed":False}
     else:
         validation = {"ok":True,"exit_code":0,"stdout":"No compiler-specific build step for this stack; files were materialized.","stderr":""}
 
