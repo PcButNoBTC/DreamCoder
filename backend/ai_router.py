@@ -53,13 +53,43 @@ MODEL_REGISTRY = {
 
 
 def _make_local() -> BaseModel:
-    """Prefer Ollama if available, otherwise fall back to mock."""
-    backend = os.getenv("DREAMCODER_LOCAL_BACKEND", "mock").lower()
+    """Prefer a real local provider. Default to Ollama when it is configured."""
+    backend = os.getenv("DREAMCODER_LOCAL_BACKEND", "ollama").lower()
     if backend == "ollama":
-        return OllamaModel(os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b"))
+        return OllamaModel(os.getenv("OLLAMA_MODEL", "tinyllama"), base_url=os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or "http://localhost:11434")
     if backend == "huggingface":
         return HuggingFaceModel()
     return MockModel("Local Model (mock)")
+
+
+def _local_ollama_model_for(name: str) -> Optional[OllamaModel]:
+    """Respect a configured local Ollama backend even when the UI selected a different model string."""
+    if not (os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")):
+        return None
+
+    local_backend = (os.getenv("DREAMCODER_LOCAL_BACKEND") or "ollama").lower()
+    if local_backend != "ollama":
+        return None
+
+    ollama_model = (
+        os.getenv("OLLAMA_MODEL")
+        or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
+        or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
+        or "tinyllama"
+    )
+    if not name or name == "mock":
+        return None
+
+    if name in {"ollama", "Ollama", "Local Model"}:
+        return OllamaModel(ollama_model, base_url=os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL"))
+
+    normalized = name.strip().lower()
+    model_name = ollama_model.strip().lower()
+    if normalized in {model_name, f"ollama:{model_name}", f"ollama:{model_name}:latest"}:
+        return OllamaModel(ollama_model, base_url=os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL"))
+    if normalized.endswith(f"/{model_name}") or normalized.endswith(f"/{model_name}:latest"):
+        return OllamaModel(ollama_model, base_url=os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL"))
+    return OllamaModel(ollama_model, base_url=os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL"))
 
 
 class AIRouter:
@@ -75,46 +105,69 @@ class AIRouter:
         not mock display names. Unknown real IDs must not silently become Mock.
         """
         name = (name or "").strip()
-        if name not in self._models:
-            if name.startswith("ollama:"):
-                self._models[name] = OllamaModel(name.split(":", 1)[1])
-            elif name.startswith("hf:"):
-                self._models[name] = HuggingFaceModel(model_id=name.split(":", 1)[1])
-            elif name.startswith("openai:"):
-                self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
-            elif "/" in name and os.getenv("HF_TOKEN"):
-                self._models[name] = HuggingFaceModel(model_id=name)
-            else:
-                ollama_base = os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
-                ollama_model = (
-                    os.getenv("OLLAMA_MODEL")
-                    or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
-                    or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
-                    or ""
-                )
-                if ollama_base and (name in {"ollama", "Ollama", "Local Model"} or name == ollama_model or name.endswith(f"/{ollama_model}")):
-                    self._models[name] = OllamaModel(ollama_model or "tinyllama", base_url=ollama_base)
-                else:
-                    factory = MODEL_REGISTRY.get(name)
-                    self._models[name] = factory() if factory is not None else MockModel(name)
+        if name in self._models:
+            return self._models[name]
+
+        if name.startswith("ollama:"):
+            self._models[name] = OllamaModel(name.split(":", 1)[1])
+            return self._models[name]
+        if name.startswith("hf:"):
+            self._models[name] = HuggingFaceModel(model_id=name.split(":", 1)[1])
+            return self._models[name]
+        if name.startswith("openai:"):
+            self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
+            return self._models[name]
+
+        # Full Hub IDs like "TroyDoesAI/Unrestricted-Knowledge-Will-Not-Refuse-15B"
+        # are real Hugging Face models, not mock placeholders. Resolve them to HF even
+        # when no explicit token is present so the app does not silently hide a real model.
+        if "/" in name and not name.lower().startswith(("http://", "https://")):
+            self._models[name] = HuggingFaceModel(model_id=name)
+            return self._models[name]
+
+        ollama_base = os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
+        ollama_model = (
+            os.getenv("OLLAMA_MODEL")
+            or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
+            or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
+            or "tinyllama"
+        )
+
+        if ollama_base and (
+            name in {"ollama", "Ollama", "Local Model"}
+            or name == ollama_model
+            or name.endswith(f"/{ollama_model}")
+            or name.endswith(f"/{ollama_model}:latest")
+            or os.getenv("DREAMCODER_LOCAL_BACKEND", "ollama").lower() == "ollama"
+        ):
+            self._models[name] = OllamaModel(ollama_model, base_url=ollama_base)
+            return self._models[name]
+
+        factory = MODEL_REGISTRY.get(name)
+        self._models[name] = factory() if factory is not None else MockModel(name)
         return self._models[name]
 
     async def list_models(self) -> list[dict[str, Any]]:
-        """Discover provider-backed models and explicitly label mock mode."""
-        models: list[dict[str, Any]] = [
-            {"id": "mock", "name": "Mock / offline", "provider": "mock", "status": "ready", "real": False}
-        ]
+        """Discover provider-backed models and prefer the local Ollama route by default."""
+        models: list[dict[str, Any]] = []
 
         ollama_url = os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
-        ollama_requested = os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL") or os.getenv("OLLAMA_MODEL") or "llama3.1:8b"
+        ollama_requested = os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL") or os.getenv("OLLAMA_MODEL") or "tinyllama"
         ollama = OllamaModel(ollama_requested, base_url=ollama_url)
         ollama_health = await ollama.health_check()
-        for tag in ollama_health.get("available_models", []):
-            models.append({"id": f"ollama:{tag}", "name": tag, "provider": "ollama", "status": "ready", "real": True})
-        if ollama_health.get("status") == "ready" and not any(m["provider"] == "ollama" for m in models):
-            models.append({"id": f"ollama:{ollama_requested}", "name": ollama_requested, "provider": "ollama", "status": "ready", "real": True})
 
-        if os.getenv("HF_TOKEN"):
+        if ollama_health.get("status") in {"ready", "model-missing"} or os.getenv("DREAMCODER_LOCAL_BACKEND", "ollama").lower() == "ollama":
+            models.append({"id": "Local Model", "name": "Local Model", "provider": "ollama", "status": "ready", "real": True})
+            for tag in ollama_health.get("available_models", []):
+                models.append({"id": f"ollama:{tag}", "name": tag, "provider": "ollama", "status": "ready", "real": True})
+            if ollama_health.get("status") == "ready" and not any(m["provider"] == "ollama" for m in models):
+                models.append({"id": f"ollama:{ollama_requested}", "name": ollama_requested, "provider": "ollama", "status": "ready", "real": True})
+
+        hf_tokens = [
+            os.getenv("HF_TOKEN"),
+            *[os.getenv(f"HF_TOKEN_{i}") for i in range(1, 25)],
+        ]
+        if any(token and token.strip() for token in hf_tokens):
             hf_id = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
             health = await HuggingFaceModel(model_id=hf_id).health_check()
             models.append({"id": f"hf:{hf_id}", "name": hf_id, "provider": "huggingface", "status": health.get("status", "configured"), "real": True})
@@ -126,6 +179,9 @@ class AIRouter:
             ids = health.get("available_models") or [openai_model]
             for mid in ids:
                 models.append({"id": f"openai:{mid}", "name": mid, "provider": "openai-compatible", "status": "ready", "real": True})
+
+        if not models:
+            models.append({"id": "mock", "name": "Mock / offline", "provider": "mock", "status": "ready", "real": False})
 
         return models
 

@@ -106,7 +106,7 @@ _sync_task = None
 # ---------------------------------------------------------------------------
 
 class SuggestRequest(BaseModel):
-    model: str = "Llama-3.1-8B-Instruct"
+    model: str = "Local Model"
     language: str = "python"
     code: str
     selection: str = ""
@@ -139,7 +139,7 @@ class RunRequest(BaseModel):
 
 
 class EvolveRequest(BaseModel):
-    model: str = "Llama-3.1-8B-Instruct"
+    model: str = "Local Model"
     prompt: str
     current_ui: dict = {}
 
@@ -171,15 +171,15 @@ class SaveFileRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    model: str = "Llama-3.1-8B-Instruct"
+    model: str = "Local Model"
     mode: str = "project"  # project | general
 
 
 class FolderAnalysisRequest(BaseModel):
-    model: str = "Llama-3.1-8B-Instruct"
+    model: str = "Local Model"
 
 class AnalysisActionRequest(BaseModel):
-    model: str = "Llama-3.1-8B-Instruct"
+    model: str = "Local Model"
     path: str
     instruction: str
     project_type: str = ""
@@ -204,7 +204,7 @@ class GenerateProjectBuildRequest(BaseModel):
 class VisionRequest(BaseModel):
     image_base64: str  # raw base64 or data URL
     prompt: str = ""
-    model: str = "Llama-3.1-8B-Instruct"
+    model: str = "Local Model"
 
 
 class TerminalRequest(BaseModel):
