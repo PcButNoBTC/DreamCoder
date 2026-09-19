@@ -11,6 +11,7 @@ import os
 import re
 import time
 from pathlib import Path
+from html import escape as escape_html
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
@@ -250,6 +251,7 @@ async def github_oauth_callback(code:str="",state:str=""):
     if not github_auth.verify_state(state): return HTMLResponse("<h3>DreamCoder GitHub sign-in failed: invalid state.</h3>",status_code=400)
     try:
         u=await github_auth.exchange(code)
+        github_sync.token=db.get_setting("github_oauth_token","")
         return HTMLResponse("<script>window.close()</script><h3>DreamCoder connected to GitHub. You can close this window.</h3>")
     except Exception as exc:
         return HTMLResponse("<h3>GitHub sign-in failed.</h3><pre>"+escape_html(str(exc))+"</pre>",status_code=502)
