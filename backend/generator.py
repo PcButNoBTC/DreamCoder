@@ -95,7 +95,8 @@ def generate_project(prompt: str, project_goal: str = "") -> dict[str, Any]:
         "latency_ms": latency,
         "summary": f"Generated {len(files)}-file {lang} project “{name}”",
         "run_hint": _run_hint(stack, name),
-        "self_heal_ready": True,\n        "source": "template",
+        "self_heal_ready": True,
+        "source": "template",
     }
 
 
