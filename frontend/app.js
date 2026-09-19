@@ -6,6 +6,20 @@ window.addEventListener("error", (e) => {
 
 const API_BASE = window.DREAMCODER_API || "http://localhost:8000";
 
+function showSyncBanner(message, kind="error", backupPath="") {
+  let banner=document.getElementById("syncBanner");
+  if(!banner){
+    banner=document.createElement("div"); banner.id="syncBanner"; banner.className="sync-banner";
+    const shell=document.querySelector(".app-shell"), workspace=document.querySelector(".workspace");
+    if(shell) shell.insertBefore(banner,workspace||shell.firstChild);
+  }
+  banner.className="sync-banner "+kind;
+  banner.innerHTML='<span class="sync-banner-msg">'+escapeHtml(message)+'</span>'+(backupPath?'<span class="sync-banner-backup">Backup: <code>'+escapeHtml(backupPath)+'</code></span>':'')+'<button class="sync-banner-close">×</button>';
+  banner.hidden=false;
+  banner.querySelector(".sync-banner-close").onclick=()=>{banner.hidden=true;};
+}
+function hideSyncBanner(){const b=document.getElementById("syncBanner");if(b)b.hidden=true;}
+
 const editor = document.getElementById("editor");
 const lineNumbers = document.getElementById("lineNumbers");
 const statusEl = document.getElementById("status");
@@ -233,11 +247,11 @@ async function saveCurrentFileLive() {
     } else {
       setGithubSyncState("sync error", "error");
       setStatus("Saved · GitHub sync failed");
-      toast("Local save succeeded, but GitHub sync failed", "error");
+      showSyncBanner("Local save succeeded, but GitHub sync failed", "error", gh.backup?.path || "");\n      toast("Local save succeeded, but GitHub sync failed", "error");
     }
   } catch (err) {
     setGithubSyncState("sync error", "error");
-    setStatus("Local edit pending");
+    setStatus("Local edit pending");\n    showSyncBanner("Local save request failed; your editor contents are still open.", "error");
   }
 }
 
@@ -2569,7 +2583,28 @@ document.getElementById("tabAdd")?.addEventListener("click", () => {
 // Initial tabs
 renderTabs();
 
-/* ========== Vision / image analysis ========== */
+
+
+async function refreshQuota(){
+  try{
+    const data=await api("/api/quota"), el=document.getElementById("quotaDisplay"); if(!el)return;
+    let html="";
+    if(data.local_lanes?.length) html+=data.local_lanes.map(l=>'<div class="quota-row"><span>'+escapeHtml(l.name)+'</span><span class="quota-inf">∞</span></div>').join("");
+    if(data.hf_remaining!=null&&data.hf_limit!=null){const pct=data.hf_percent_remaining??0,cls=pct<20?"quota-warn":"quota-ok";html+='<div class="quota-row"><span>HF quota</span><span class="'+cls+'">'+data.hf_remaining+'/'+data.hf_limit+'</span></div>';if(data.hf_seconds_until_reset)html+='<div class="quota-row muted">Resets in '+Math.round(data.hf_seconds_until_reset)+'s</div>';}
+    else html+='<div class="quota-row muted">HF quota: not recorded yet</div>';
+    el.innerHTML=html;
+  }catch(_){}
+}
+async function validateAndLoadOllama(){
+  const url=document.getElementById("ollamaUrlInput")?.value?.trim();if(!url){toast("Enter a URL","info");return;}
+  try{const data=await api("/api/ollama/validate",{method:"POST",body:JSON.stringify({url})});renderOllamaModels(data);toast(data.model_count+" models loaded","success");}catch(err){toast("Validation failed: "+err.message,"error");}
+}
+function renderOllamaModels(data){
+  const box=document.getElementById("ollamaModelList");if(!box)return;box.innerHTML="";const recommended=data.recommended?.name||"";
+  (data.models||[]).forEach(m=>{const row=document.createElement("button");row.className="hf-item";row.innerHTML='<span class="hf-id">'+escapeHtml(m.name)+(m.name===recommended?" ★":"")+'</span><span class="hf-meta">'+escapeHtml(m.parameter_size||"?")+" · "+escapeHtml(m.quantization||"?")+" · score "+m.score+'</span>';row.onclick=()=>setPrimaryOllama(data.url,m.name);box.appendChild(row);});
+}
+async function setPrimaryOllama(url,model){try{await api("/api/ollama/primary",{method:"POST",body:JSON.stringify({url,model})});toast("Primary set: "+model,"success");refreshQuota();}catch(err){toast("Could not set primary","error");}}
+\n/* ========== Vision / image analysis ========== */
 let visionDataUrl = "";
 
 function setVisionPreview(dataUrl) {
@@ -2657,7 +2692,7 @@ visionDrop?.addEventListener("drop", (e) => {
   reader.onload = () => setVisionPreview(reader.result);
   reader.readAsDataURL(f);
 });
-document.getElementById("visionAnalyzeBtn")?.addEventListener("click", analyzeVision);
+document.getElementById("visionAnalyzeBtn")?.addEventListener("click", analyzeVision);\ndocument.getElementById("ollamaValidateBtn")?.addEventListener("click", validateAndLoadOllama);
 
 // Paste image anywhere in app
 document.addEventListener("paste", (e) => {
@@ -2744,6 +2779,6 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   if (st && (!st.textContent || st.textContent === "Ready")) {
     /* keep */
   }
-  loadAvailableModels().catch(() => {});
+  loadAvailableModels().catch(() => {});\n  refreshQuota();\n  setInterval(refreshQuota,30000);
   console.log("DreamCoder UI ready");
 })();
