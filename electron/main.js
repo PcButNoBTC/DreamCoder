@@ -1,84 +1,79 @@
-/**
- * DreamCoder desktop shell (Electron)
- *
- * Starts a local Python backend if possible, then loads the frontend.
- * Run from the electron/ folder after `npm install`.
- */
-
 const { app, BrowserWindow, shell, dialog, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
-const { spawn } = require("child_process");\nconst http = require("http");
+const { spawn } = require("child_process");
+const http = require("http");
 
 let mainWindow = null;
 let backendProc = null;
-let backendReady = false;
-app.setName("DreamCoder");
-
-const BACKEND_PORT = 8000;
+const BACKEND_PORT = Number(process.env.DREAMCODER_BACKEND_PORT || 8000);
 const FRONTEND = path.join(__dirname, "..", "frontend", "index.html");
 
 function startBackend() {
   const backendDir = path.join(__dirname, "..", "backend");
-  // Prefer python -m uvicorn so PATH issues are avoided on Windows
   const cmd = process.platform === "win32" ? "python" : "python3";
-  backendProc = spawn(
-    cmd,
-    ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", String(BACKEND_PORT)],
-    { cwd: backendDir, shell: false, stdio: "pipe", windowsHide: true }
-  );
-  backendProc.stdout.on("data", (d) => console.log(`[backend] ${d}`));
-  backendProc.stderr.on("data", (d) => console.error(`[backend] ${d}`));
-  backendProc.on("exit", (code) => { backendReady=false; console.log(`backend exited ${code}`); if(mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("dreamcoder:backend-exit", code); });
+  backendProc = spawn(cmd, ["-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", String(BACKEND_PORT)], {
+    cwd: backendDir, shell: false, stdio: "pipe", windowsHide: true
+  });
+  backendProc.stdout.on("data", d => console.log("[backend]", String(d)));
+  backendProc.stderr.on("data", d => console.error("[backend]", String(d)));
+  backendProc.on("exit", code => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("dreamcoder:backend-exit", code);
+  });
 }
 
-ipcMain.handle("dreamcoder:choose-folder", async () => {\n  const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });\n  return result.canceled ? null : result.filePaths[0];\n});\n\nfunction waitForBackend(attempt = 0) {\n  if (attempt > 30) return createWindow();\n  const req = http.get(`http://127.0.0.1:${BACKEND_PORT}/`, (res) => {\n    res.resume();\n    createWindow();\n  });\n  req.on("error", () => setTimeout(() => waitForBackend(attempt + 1), 250));\n  req.setTimeout(250, () => req.destroy());\n}\n\nfunction createWindow() {
+ipcMain.handle("dreamcoder:choose-folder", async () => {
+  const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+  return result.canceled ? null : result.filePaths[0];
+});
+
+function waitForBackend(attempt = 0) {
+  if (attempt > 60) return createWindow();
+  const req = http.get("http://127.0.0.1:" + BACKEND_PORT + "/", res => {
+    res.resume();
+    createWindow();
+  });
+  req.on("error", () => setTimeout(() => waitForBackend(attempt + 1), 250));
+  req.setTimeout(500, () => req.destroy());
+}
+
+function createWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) return;
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: "#0b0e14",
-    title: "DreamCoder",
+    width: 1400, height: 900, minWidth: 900, minHeight: 600,
+    title: "DreamCoder", backgroundColor: "#0b0e14",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+      contextIsolation: true, nodeIntegration: false, sandbox: true
+    }
   });
-
-  // Inject API base so the UI talks to the local backend
+  mainWindow.loadFile(FRONTEND);
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.executeJavaScript(
-      `window.DREAMCODER_API = "http://127.0.0.1:${BACKEND_PORT}";`
-    );
+      "window.DREAMCODER_API = 'http://127.0.0.1:" + BACKEND_PORT + "';"
+    ).catch(() => {});
   });
-
-  mainWindow.loadFile(FRONTEND);
-
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:$/i.test(new URL(url).protocol)) shell.openExternal(url);
     return { action: "deny" };
   });
+  mainWindow.on("closed", () => { mainWindow = null; });
 }
 
 app.whenReady().then(() => {
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
   startBackend();
-  // small delay so uvicorn can bind
   waitForBackend();
-  if (app.isPackaged && process.env.DREAMCODER_DISABLE_UPDATES !== "1") { autoUpdater.checkForUpdatesAndNotify().catch(err => console.warn("update check failed", err)); }
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on("before-quit", () => { if (backendProc) { try { backendProc.kill("SIGTERM"); } catch (_) {} } });
-
-app.on("window-all-closed", () => {
-  if (backendProc) {
-    backendProc.kill();
-    backendProc = null;
+  if (app.isPackaged && process.env.DREAMCODER_DISABLE_UPDATES !== "1") {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => console.warn("update check failed", err));
   }
-  if (process.platform !== "darwin") app.quit();
+  app.on("second-instance", () => {
+    if (mainWindow) { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.focus(); }
+  });
+  app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) waitForBackend(); });
 });
+
+app.on("before-quit", () => {
+  if (backendProc) { try { backendProc.kill(); } catch (_) {} backendProc = null; }
+});
+app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
