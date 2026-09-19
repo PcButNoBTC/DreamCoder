@@ -1421,6 +1421,24 @@ async def terminal_cwd():
 
 # ---------- WebSocket streaming completions ----------
 
+@app.websocket("/ws/chat")
+async def ws_chat(ws:WebSocket):
+    await ws.accept()
+    try:
+        while True:
+            msg=json.loads(await ws.receive_text())
+            model_name=msg.get("model","Llama-3.1-8B-Instruct")
+            ctx=ChatContext(message=msg.get("message",""),mode=msg.get("mode","project"),project_context=msg.get("project_context",""),history=msg.get("history",[]))
+            model=router.get_model(model_name)
+            await ws.send_json({"type":"start","model":model_name})
+            async for chunk in model.stream_chat(ctx):
+                if chunk: await ws.send_json({"type":"token","text":chunk})
+            await ws.send_json({"type":"done","model":model_name})
+    except WebSocketDisconnect: return
+    except Exception as exc:
+        try: await ws.send_json({"type":"error","message":str(exc)})
+        except Exception: pass
+
 @app.websocket("/ws/complete")
 async def ws_complete(ws: WebSocket):
     """Token-by-token (simulated or real) completion stream.
