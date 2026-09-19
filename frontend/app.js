@@ -1437,13 +1437,16 @@ async function openNativeWorkspace(root) {
     toast("Connected " + data.root, "success");
     await refreshWorkspaceGitStatus();
     await refreshMonitor();
-    const files = await api("/api/files");
-    if (Array.isArray(files)) {
-      fileBuffers = {};
-      files.forEach(f => { if (f.path && f.content != null) fileBuffers[f.path] = f.content; });
-      renderFileTree(Object.keys(fileBuffers));
-      const first = Object.keys(fileBuffers)[0];
-      if (first) openPath(first);
+    const listing = await api("/api/files");
+    const files = listing?.files || [];
+    fileBuffers = {};
+    const paths = files.map(f => f.path).filter(Boolean);
+    renderFileTree(paths);
+    const first = paths[0];
+    if (first) {
+      const file = await api("/api/files/" + encodeURIComponent(first));
+      fileBuffers[first] = file.content || "";
+      openPath(first);
     }
   } catch (err) {
     toast("Workspace connection failed: " + err.message, "error");
