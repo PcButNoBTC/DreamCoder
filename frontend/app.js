@@ -341,7 +341,7 @@ async function runProjectAgent() {
 
 function renderAgentRun(data) {
   const steps = (data.plan || []).map((s, i) => `${i + 1}. ${escapeHtml(s.title)}`).join("<br>");
-  const changes = (data.changes || []).filter(c => c && c.path).map(c => `<div class="agent-change"><strong>${escapeHtml(c.path)}</strong><span>${escapeHtml(c.summary || "proposed change")}</span>${c.diff ? '<pre class="analysis-diff">' + escapeHtml(c.diff) + '</pre>' : ''}</div>`).join("");
+  const changes = (data.changes || []).filter(c => c && c.path).map(c => `<div class="agent-change"><strong><span class="change-type" data-type="${escapeHtml(c.change_type || "PROJECT_MODIFY")}">${escapeHtml(c.change_type || "PROJECT_MODIFY")}</span>${escapeHtml(c.path)}</strong><span>${escapeHtml(c.summary || "proposed change")}</span>${c.diff ? '<pre class="analysis-diff">' + escapeHtml(c.diff) + '</pre>' : ''}</div>`).join("");
   const body = `
     <div class="muted">Model: ${escapeHtml(data.model || modelSelect.value)} · Status: ${escapeHtml(data.status || "unknown")}</div>
     <div class="analysis-section">Plan</div><div class="analysis-model-note">${steps || "No plan returned."}</div>
