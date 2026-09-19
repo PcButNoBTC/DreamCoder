@@ -24,7 +24,7 @@ async def exchange(code):
     async with httpx.AsyncClient(timeout=20) as client:
         r=await client.post("https://github.com/login/oauth/access_token",data={"client_id":c["client_id"],"client_secret":c["client_secret"],"code":code},headers={"Accept":"application/json"}); r.raise_for_status(); d=r.json()
     if "access_token" not in d: raise RuntimeError(d.get("error_description") or "GitHub OAuth failed")
-    db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800))))
+    db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800)))); db.set_setting("github_oauth_refresh_token",d.get("refresh_token","")); db.set_setting("github_oauth_refresh_expires_at",str(time.time()+int(d.get("refresh_token_expires_in",15897600))))
     os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
 async def user():
     token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
@@ -48,3 +48,13 @@ async def repositories(installation_id=None):
     return {"ok":True,"repositories":[{"full_name":x.get("full_name"),"private":x.get("private"),"default_branch":x.get("default_branch")} for x in arr]}
 def disconnect():
     db.set_setting("github_oauth_token",""); db.set_setting("github_oauth_expires_at",""); os.environ.pop("GITHUB_TOKEN",None); return {"ok":True,"connected":False}
+
+async def refresh():
+    c=_cfg(); token=db.get_setting("github_oauth_refresh_token","")
+    if not token:return {"ok":False,"error":"no refresh token"}
+    async with httpx.AsyncClient(timeout=20) as client:
+        r=await client.post("https://github.com/login/oauth/access_token",data={"client_id":c["client_id"],"client_secret":c["client_secret"],"grant_type":"refresh_token","refresh_token":token},headers={"Accept":"application/json"}); r.raise_for_status(); d=r.json()
+    if "access_token" not in d:return {"ok":False,"error":d.get("error_description","refresh failed")}
+    db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800))))
+    if d.get("refresh_token"): db.set_setting("github_oauth_refresh_token",d["refresh_token"])
+    os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
