@@ -44,25 +44,59 @@ class AgentRuntime:
     def _project_context(self, cwd: str) -> str:
         goal=db.get_setting("project_goal","") or ""
         desc=db.get_setting("project_description","") or ""
-        files=[]
         root=Path(cwd)
-        for p in root.rglob("*"):
-            if len(files)>=30 or not p.is_file() or any(x in p.parts for x in (".git","node_modules",".venv","__pycache__")): continue
-            files.append(str(p.relative_to(root)))
-        return f"Project goal: {goal}\nDescription: {desc}\nFiles:\n"+"\n".join(files)
+        chunks=[]
+        total=0
+        ignored={".git","node_modules",".venv","venv","__pycache__","dist","build"}
+        for p in sorted(root.rglob("*")):
+            if total >= 40000 or not p.is_file() or any(x in p.parts for x in ignored):
+                continue
+            try:
+                content=p.read_text(encoding="utf-8")
+            except (UnicodeDecodeError,OSError):
+                continue
+            rel=str(p.relative_to(root))
+            block=f"\n# --- {rel} ---\n{content[:5000]}"
+            chunks.append(block)
+            total += len(block)
+        return f"Project goal: {goal}\nDescription: {desc}\nProject files:{''.join(chunks) or '(none)'}"
 
-    async def _plan(self, req: AgentRequest) -> list[PlanStep]:
-        ctx=self._project_context(req.cwd)
-        prompt=(f"Plan a safe software-engineering task. Return concise steps, no code.\nGoal: {req.goal}\n{ctx}\n"
-                "Use only these tool concepts: read_file, search, write_file, apply_patch, run, test, git_status, git_diff.")
-        inf=await self.router.suggest(req.model,CodeContext(code=prompt,language="text",filename="agent-plan"),use_cache=False)
-        titles=[s.title for s in inf.suggestions[:5]]
-        if not titles: titles=["Inspect project", "Implement requested change", "Validate with tests", "Review git diff"]
-        tools=[ ["search","read_file"], ["write_file","apply_patch"], ["run","test"], ["git_status","git_diff"] ]
-        return [PlanStep(id=f"step-{i+1}",title=t,purpose="Agent step derived from project context",tools=tools[min(i,len(tools)-1)],requires_approval=any(x in tools[min(i,len(tools)-1)] for x in ("write_file","apply_patch"))) for i,t in enumerate(titles)]
+    @staticmethod
+    def _extract_json(text: str) -> Any:
+        cleaned=(text or "").strip()
+        if cleaned.startswith("```"):
+            cleaned=cleaned.split("\n",1)[-1].rsplit("```",1)[0].strip()
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            for opener,closer in (("{","}"),("[","]")):
+                start=cleaned.find(opener); end=cleaned.rfind(closer)
+                if start>=0 and end>start:
+                    try: return json.loads(cleaned[start:end+1])
+                    except Exception: pass
+        return None
+
+    async def _generate_changes(self, req: AgentRequest, run: AgentRun, repair_context: str = "") -> list[dict[str, str]]:
+        project=self._project_context(req.cwd)
+        plan="\n".join(f"- {s.title}: {s.purpose}" for s in run.plan)
+        prompt=("You are DreamCoder's project coding agent.\n"
+                "Work only inside the supplied workspace snapshot. Do not invent files or dependencies.\n"
+                "Return ONLY JSON: {\"changes\":[{\"path\":\"relative/path\",\"content\":\"complete file content\",\"summary\":\"why\"}]}\n"
+                f"Goal: {req.goal}\nPlan:\n{plan}\nRepair context:\n{repair_context or 'none'}\nWorkspace snapshot:\n{project}")
+        from models.base import ChatContext
+        result=await self.router.chat(req.model,ChatContext(message=prompt,mode="project",project_goal=db.get_setting("project_goal","") or "",project_context=project),use_cache=False)
+        parsed=self._extract_json(result.content)
+        changes=(parsed or {}).get("changes",[]) if isinstance(parsed,dict) else []
+        valid=[]
+        for item in changes:
+            if not isinstance(item,dict) or not item.get("path") or "content" not in item: continue
+            rel=str(Path(str(item["path"])))
+            if rel.startswith("..") or Path(rel).is_absolute(): continue
+            valid.append({"path":rel,"content":str(item["content"]),"summary":str(item.get("summary",""))})
+        return valid[:8]
 
     async def run(self, req: AgentRequest) -> AgentRun:
-        run=AgentRun(id=uuid.uuid4().hex,status="planning",goal=req.goal,cwd=str(Path(req.cwd).resolve()))
+        run=AgentRun(id=uuid.uuid4().hex,status="planning",goal=req.goal,cwd=str(Path(req.cwd).resolve()),model=req.model)
         self._persist(run); self._event(run,"run.started",model=req.model)
         try:
             run.plan=await self._plan(req); run.status="awaiting_approval" if any(s.requires_approval for s in run.plan) and not req.auto_apply else "executing"; self._persist(run)
@@ -74,42 +108,43 @@ class AgentRuntime:
 
     async def approve(self, run_id: str, req: AgentRequest | None = None) -> AgentRun:
         run=self.get(run_id)
-        if run.status!="awaiting_approval": return run
+        if run.status not in ("awaiting_approval","repair_needed"): return run
         run.status="executing"; self._persist(run); self._event(run,"approval.granted")
-        if req is None: req=AgentRequest(goal=run.goal,cwd=run.cwd,auto_apply=True)
-        else: req.auto_apply=True
+        if req is None: req=AgentRequest(goal=run.goal,cwd=run.cwd,model=run.model,auto_apply=False)
+        else: req.model=run.model or req.model
         return await self._execute(run,req)
 
     async def _execute(self, run: AgentRun, req: AgentRequest) -> AgentRun:
         tools=ToolRegistry(run.cwd,timeout=req.timeout,auto_apply=req.auto_apply)
-        # Context-first actions are deterministic; model planning remains visible but does not get direct authority.
-        for spec,args in [("git_status",{}),("search",{"query":req.goal,"limit":12})]:
-            await self._call(run,tools,spec,args)
+        await self._call(run,tools,"git_status",{})
+        await self._call(run,tools,"search",{"query":req.goal,"limit":12})
+        repair_context="" if run.repair_count == 0 else json.dumps(run.validation,default=str)
+        changes=await self._generate_changes(req,run,repair_context)
+        if changes:
+            run.changes=changes
+            self._event(run,"changes.proposed",changes=[{"path":x["path"],"summary":x.get("summary","")} for x in changes])
+            if not req.auto_apply:
+                run.status="awaiting_approval"; self._persist(run); return run
+            for change in changes:
+                await self._call(run,tools,"write_file",{"path":change["path"],"content":change["content"]})
+        else:
+            self._event(run,"changes.none")
         run.status="validating"; self._persist(run)
         validation=await self._call(run,tools,"test",{"command":"pytest -q"})
-        run.validation=validation or {}
+        run.validation=validation or {}; self._persist(run)
         if not validation or not validation.get("ok",False):
             run.repair_count+=1
             self._event(run,"validation.failed",details=validation)
             if run.repair_count<=req.max_repairs:
+                run.changes=[]
                 run.status="repair_needed"; self._persist(run)
-                self._event(run,"repair.proposed",message="Tests failed; inspect the failure and propose a minimal patch.")
-                # Do not silently mutate code: repair remains an approval boundary.
+                self._event(run,"repair.proposed",message="Tests failed; approve to let the selected model generate a repair.")
                 return run
         diff=await self._call(run,tools,"git_diff",{})
-        run.changes.append(diff or {})
+        run.changes.extend([diff or {}])
         run.status="completed" if (not validation or validation.get("ok",False)) else "failed"
         self._event(run,"run.completed",status=run.status)
         return run
-
-    async def _call(self,run:AgentRun,tools:ToolRegistry,name:str,args:dict[str,Any]):
-        call=ToolCall(id=uuid.uuid4().hex[:10],tool=name,args=args,status="running"); run.tool_calls.append(call); self._persist(run); self._event(run,"tool.started",tool=name,call_id=call.id,args=args)
-        try:
-            out=tools.dispatch(name,args); call.status="completed"; call.output=out
-            conn=db.get_conn(); conn.execute("INSERT INTO agent_tool_calls(run_id,tool,args,status,output,created_at) VALUES(?,?,?,?,?,?)",(run.id,name,json.dumps(args),call.status,json.dumps(out,default=str),time.time())); conn.commit(); conn.close(); self._persist(run); self._event(run,"tool.completed",tool=name,call_id=call.id,output=out); return out
-        except Exception as exc:
-            call.status="failed"; call.error=str(exc); self._persist(run); self._event(run,"tool.failed",tool=name,call_id=call.id,error=str(exc)); return {"ok":False,"error":str(exc)}
-
     def get(self,run_id:str)->AgentRun:
         if run_id in self.runs:return self.runs[run_id]
         conn=db.get_conn(); row=conn.execute("SELECT payload FROM agent_runs WHERE id=?",(run_id,)).fetchone(); conn.close()
