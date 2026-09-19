@@ -348,6 +348,10 @@ function renderAgentRun(data) {
     ${changes ? '<div class="analysis-section">Proposed changes</div>' + changes : ""}
     ${data.validation?.stderr ? '<div class="analysis-section">Validation</div><pre class="analysis-diff">' + escapeHtml(data.validation.stderr) + '</pre>' : ""}
   `;
+  if (data.sync_warnings?.length) {
+    const w=data.sync_warnings[0];
+    showSyncBanner("GitHub sync failed for "+(w.path||"a changed file"),"error",w.backup_path||"");
+  }
   const needsChangesApproval = data.status === "awaiting_approval" && changes;
   showModal({
     title: needsChangesApproval ? "Review model changes" : "Project agent plan",
