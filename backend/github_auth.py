@@ -2,7 +2,7 @@
 from __future__ import annotations
 import hashlib,hmac,os,secrets,time
 from urllib.parse import urlencode
-import httpx
+import httpx\nimport jwt
 import db
 from credentials import set_secret,get_secret,delete_secret,available
 def _cfg():
@@ -59,3 +59,19 @@ async def refresh():
     db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800))))
     if d.get("refresh_token"): db.set_setting("github_oauth_refresh_token",d["refresh_token"])
     os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
+
+def app_configured():
+    return bool(os.getenv("DREAMCODER_GITHUB_APP_ID") and (os.getenv("DREAMCODER_GITHUB_APP_PRIVATE_KEY") or os.getenv("DREAMCODER_GITHUB_APP_PRIVATE_KEY_FILE")))
+def _app_jwt():
+    key=os.getenv("DREAMCODER_GITHUB_APP_PRIVATE_KEY","")
+    if not key:
+        key=open(os.getenv("DREAMCODER_GITHUB_APP_PRIVATE_KEY_FILE"),"r",encoding="utf-8").read()
+    now=int(time.time())
+    return jwt.encode({"iat":now-30,"exp":now+540,"iss":os.getenv("DREAMCODER_GITHUB_APP_ID")},key,algorithm="RS256")
+async def app_installation_token(installation_id:int):
+    if not app_configured(): return {"ok":False,"error":"GitHub App is not configured"}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r=await c.post(f"https://api.github.com/app/installations/{installation_id}/access_tokens",headers={"Authorization":f"Bearer {_app_jwt()}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}); r.raise_for_status(); d=r.json()
+    token=d["token"]; set_secret("github_app_installation_token",token) if available() else db.set_setting("github_app_installation_token",token)
+    db.set_setting("github_app_installation_id",str(installation_id)); db.set_setting("github_app_token_expires_at",d.get("expires_at",""))
+    return {"ok":True,"installation_id":installation_id,"expires_at":d.get("expires_at")}
