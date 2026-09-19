@@ -40,20 +40,20 @@ class ToolRegistry:
                     if len(hits)>=limit: break
         return {"query":query,"hits":hits}
 
-    def write_file(self, path: str, content: str) -> dict[str, Any]:
+    def write_file(self, path: str, content: str, change_type: str = "APP_MODIFY") -> dict[str, Any]:
         if not self.auto_apply: raise PermissionError("write_file requires approval")
         p=self._path(path); p.parent.mkdir(parents=True,exist_ok=True); before=p.read_text(encoding="utf-8") if p.exists() else ""
         p.write_text(content,encoding="utf-8")
-        return {"path":str(p.relative_to(self.root)),"created":not bool(before),"change_type":"APP_MODIFY","diff":"".join(difflib.unified_diff(before.splitlines(True),content.splitlines(True),fromfile=str(p),tofile=str(p)))}
+        return {"path":str(p.relative_to(self.root)),"created":not bool(before),"change_type":change_type,"diff":"".join(difflib.unified_diff(before.splitlines(True),content.splitlines(True),fromfile=str(p),tofile=str(p)))}
 
-    def apply_patch(self, path: str, old: str, new: str) -> dict[str, Any]:
+    def apply_patch(self, path: str, old: str, new: str, change_type: str = "APP_MODIFY") -> dict[str, Any]:
         if not self.auto_apply: raise PermissionError("apply_patch requires approval")
         p=self._path(path)
         current=p.read_text(encoding="utf-8")
         if old not in current: raise ValueError(f"Patch anchor not found in {path}")
         updated=current.replace(old,new,1)
         p.write_text(updated,encoding="utf-8")
-        return {"path":path,"change_type":"APP_MODIFY","diff":"".join(difflib.unified_diff(current.splitlines(True),updated.splitlines(True),fromfile=path,tofile=path))}
+        return {"path":path,"change_type":change_type,"diff":"".join(difflib.unified_diff(current.splitlines(True),updated.splitlines(True),fromfile=path,tofile=path))}
 
     def run(self, command: str) -> dict[str, Any]:
         from .permissions import split_segments, unrestricted_mode
