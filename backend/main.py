@@ -22,7 +22,7 @@ from models.base import ChatContext, CodeContext
 from watcher import IndexWatcher
 from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
-from generator import generate_project, self_heal, files_to_zip
+from generator import generate_project, generate_project_with_model, self_heal, files_to_zip
 from github_sync import github_sync
 import workspace
 from agent.api import router as agent_router
@@ -122,7 +122,7 @@ class EvolveRequest(BaseModel):
 class WatchRequest(BaseModel):
     root: str
 
-class WorkspaceRequest(BaseModel):
+class OllamaHostRequest(BaseModel):\n    url: str\n\nclass OllamaPrimaryRequest(BaseModel):\n    url: str\n    model: str\n\nclass WorkspaceRequest(BaseModel):
     root: str
 
 class GitRequest(BaseModel):
@@ -210,7 +210,50 @@ async def health(model: Optional[str] = None):
     return info
 
 
-@app.get("/api/models")
+
+
+@app.post("/api/ollama/validate")
+async def ollama_validate(req: OllamaHostRequest):
+    try: normalized=validate_host(req.url)
+    except ValueError as exc: raise HTTPException(400,str(exc))
+    try: models=await fetch_models(normalized)
+    except ValueError as exc: raise HTTPException(502,str(exc))
+    ranked=rank_models(models)
+    return {"ok":True,"url":normalized,"model_count":len(ranked),"models":ranked,"recommended":pick_primary(ranked)}
+
+@app.post("/api/ollama/primary")
+async def ollama_set_primary(req: OllamaPrimaryRequest):
+    try: normalized=validate_host(req.url)
+    except ValueError as exc: raise HTTPException(400,str(exc))
+    db.set_setting("ollama_primary_url",normalized); db.set_setting("ollama_primary_model",req.model)
+    os.environ["DREAMCODER_OLLAMA_PRIMARY_URL"]=normalized
+    os.environ["DREAMCODER_OLLAMA_PRIMARY_MODEL"]=req.model
+    return {"ok":True,"url":normalized,"model":req.model}
+
+@app.get("/api/ollama/primary")
+async def ollama_get_primary():
+    return {"url":db.get_setting("ollama_primary_url",os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL","")),"model":db.get_setting("ollama_primary_model",os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL",""))}
+
+@app.get("/api/quota")
+async def quota():
+    return quota_snapshot()
+
+@app.get("/api/backups")
+async def list_backups():
+    return {"backups":backup_manager.list_backups()}
+
+@app.get("/api/agent/audit")
+async def agent_audit(limit:int=200):
+    return {"entries":backup_manager.read_audit_log(limit=limit)}
+
+@app.post("/api/model-race/test")
+async def model_race_test(body:dict={}):
+    prompt=body.get("prompt","Say hello in one short sentence.")
+    lanes=build_lanes_from_env()
+    if not lanes: raise HTTPException(400,"No lanes configured")
+    result=await race(lanes,ChatContext(message=prompt,mode="general"),expected_format=None,min_responses=1)
+    return {"winner":result.winner.lane.name if result.winner else None,"winner_model":result.winner.lane.model if result.winner else None,"winner_content":result.winner.content if result.winner else None,"losers":[{"lane":l.lane.name,"reason":l.reason,"latency_ms":l.latency_ms} for l in result.losers],"duration_ms":result.duration_ms,"race_id":result.race_id}
+\n@app.get("/api/models")
 async def list_models():
     return {"models": await router.list_models()}
 
@@ -884,10 +927,16 @@ async def hf_select(payload: dict):
 
 @app.post("/api/ai/generate-project")
 async def api_generate_project(req: GenerateProjectRequest):
-    goal = req.goal or db.get_setting("project_goal", "") or ""
-    result = generate_project(req.prompt, project_goal=goal)
-    db.add_history("generate", "generator", req.prompt[:400], result.get("summary", ""), result.get("latency_ms", 0))
-    return result
+    goal=req.goal or db.get_setting("project_goal","") or ""
+    model_result=await generate_project_with_model(req.prompt,goal,router)
+    if model_result.get("ok"):
+        db.add_history("generate",model_result.get("model","model"),req.prompt[:400],model_result.get("summary",""),model_result.get("latency_ms",0))
+        return model_result
+    template_result=generate_project(req.prompt,project_goal=goal)
+    template_result["fallback_reason"]=model_result.get("error","model unavailable")
+    template_result["model_losers"]=model_result.get("losers",[])
+    db.add_history("generate","template",req.prompt[:400],template_result.get("summary",""),template_result.get("latency_ms",0))
+    return template_result
 
 
 @app.post("/api/ai/self-heal")
