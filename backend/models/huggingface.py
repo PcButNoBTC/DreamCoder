@@ -139,6 +139,8 @@ class HuggingFaceModel(BaseModel):
             if not value:
                 return
             cleaned = value.strip()
+            if not cleaned or cleaned.startswith("#"):
+                return
             if cleaned and cleaned not in seen:
                 tokens.append(cleaned)
                 seen.add(cleaned)
@@ -155,6 +157,45 @@ class HuggingFaceModel(BaseModel):
             raw = os.getenv(env_name, "")
             for part in re.split(r"[,;\n]+", raw):
                 add(part)
+
+        for env_name in ("HF_TOKENS_FILE", "HF_TOKEN_FILE", "TOKEN_FILE"):
+            token_file = os.getenv(env_name, "")
+            if token_file:
+                try:
+                    with open(token_file, "r", encoding="utf-8") as handle:
+                        for line in handle:
+                            for part in re.split(r"[,;\n]+", line):
+                                add(part)
+                except OSError:
+                    pass
+
+        candidates = []
+        current = os.getcwd()
+        seen_paths: set[str] = set()
+        while True:
+            for name in ("hf_tokens.txt", "tokens.txt", "backend/hf_tokens.txt"):
+                candidate = os.path.join(current, name)
+                if candidate not in seen_paths:
+                    seen_paths.add(candidate)
+                    candidates.append(candidate)
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        for candidate in (os.path.join(repo_root, "hf_tokens.txt"), os.path.join(repo_root, "tokens.txt"), os.path.join(repo_root, "backend", "hf_tokens.txt")):
+            if candidate not in seen_paths:
+                candidates.append(candidate)
+
+        for candidate in candidates:
+            try:
+                with open(candidate, "r", encoding="utf-8") as handle:
+                    for line in handle:
+                        for part in re.split(r"[,;\n]+", line):
+                            add(part)
+            except OSError:
+                continue
 
         return tokens
 

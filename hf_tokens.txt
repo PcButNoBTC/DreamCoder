@@ -1,0 +1,4 @@
+# Add one Hugging Face access token per line.
+# Example:
+# hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# hf_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
