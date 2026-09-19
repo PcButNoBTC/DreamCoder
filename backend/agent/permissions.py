@@ -22,6 +22,8 @@ def split_segments(command:str):
     if unrestricted_mode(): return [(cmd,"and")]
     for ch in FORBIDDEN_CHARS:
         if ch in cmd: raise PermissionError(f"Command contains forbidden character: {ch!r}")
+    if "|" in cmd.replace("||",""):
+        raise PermissionError("Command contains forbidden character: |")
     segments=[]; current_op="and"
     for part in re.split(r"(&&|\|\|)",cmd):
         part=part.strip()
