@@ -1049,9 +1049,18 @@ async def terminal_run(req: TerminalRequest):
         return {"ok": False, "output": "", "error": "empty command", "exit_code": 1}
 
     # Resolve cwd
-    cwd = (req.cwd or "").strip() or os.getcwd()
-    if not Path(cwd).exists():
-        cwd = os.getcwd()
+    cwd = (req.cwd or "").strip() or str(workspace.root() or Path.cwd())
+    root = workspace.root()
+    if root is not None:
+        try:
+            candidate = Path(cwd).expanduser().resolve()
+            if candidate != root and root not in candidate.parents:
+                raise HTTPException(400, "Terminal cwd must stay inside the active workspace")
+            cwd = str(candidate)
+        except HTTPException:
+            raise
+        except Exception:
+            cwd = str(root)
 
     start = time.perf_counter()
     try:
