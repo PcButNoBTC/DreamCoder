@@ -7,29 +7,52 @@ on:
     branches: ["main"]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run tests
+        run: python -m pip install -r requirements.txt
+      - name: Tests
         working-directory: backend
         env:
           PYTHONPATH: .
         run: pytest -q
-      - name: Run permission and backup tests
-        working-directory: backend
-        env:
-          PYTHONPATH: .
-        run: |
-          pytest tests/test_permissions.py -q
-          pytest tests/test_backup_manager.py -q
+      - name: Python syntax
+        run: python -m compileall -q backend
 
-      - name: Syntax checks
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: JavaScript syntax
         run: |
-          python -m py_compile $(find backend -name '*.py')
           node --check frontend/app.js
+          node --check electron/main.js
+          node --check electron/preload.js
+
+  electron:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: electron
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install desktop dependencies
+        run: npm install --ignore-scripts
+      - name: Package smoke test
+        run: npm run pack
