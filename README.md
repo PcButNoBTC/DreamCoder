@@ -205,3 +205,9 @@ curl -X POST http://localhost:8000/api/agent/run \
 Write/patch operations stop at an approval boundary by default. After reviewing the plan, approve the run with `POST /api/agent/runs/{run_id}/approve`.
 
 Agent tools are explicit: `read_file`, `search`, `write_file`, `apply_patch`, `run`, `test`, `git_status`, and `git_diff`. Command execution is restricted to a small development-tool allowlist and paths cannot escape the workspace.
+
+### Model-selected chat
+
+Chat is no longer handled by a hard-coded heuristic responder. Every chat request carries the UI's selected model into the central model router, and the router invokes that model adapter's native conversational interface. Project mode additionally supplies indexed project context and the saved project goal; General mode omits project context.
+
+The chat response reports both the selected model and the backend in the UI. If a model is configured as a mock/offline adapter, DreamCoder labels that explicitly rather than presenting a heuristic answer as real model inference.
