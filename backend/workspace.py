@@ -94,6 +94,34 @@ def read_file(path: str) -> str:
 def git(args: list[str], timeout: int = 60) -> dict[str, Any]:
     return _run(["git", *args], timeout=timeout)
 
+def run_shell(command: str, timeout: int = 120) -> dict[str, Any]:
+    """Run a user-requested project command in the canonical workspace.
+
+    The command is intentionally executed by the platform shell because generated
+    projects commonly need compound commands (cd, &&, npm scripts, cmake, etc.).
+    Callers must only pass commands derived from a trusted project/build plan.
+    """
+    p = root()
+    if p is None:
+        return {"ok": False, "error": "No workspace configured"}
+    if not command.strip():
+        return {"ok": False, "error": "Empty command"}
+    shell = os.environ.get("COMSPEC") if os.name == "nt" else "/bin/sh"
+    args = [shell, "/c", command] if os.name == "nt" else [shell, "-lc", command]
+    try:
+        r = subprocess.run(args, cwd=str(p), capture_output=True, text=True, timeout=timeout)
+        return {
+            "ok": r.returncode == 0,
+            "exit_code": r.returncode,
+            "stdout": r.stdout[-12000:],
+            "stderr": r.stderr[-12000:],
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {"ok": False, "error": f"Command timed out after {timeout}s", "stdout": (exc.stdout or "")[-12000:] if exc.stdout else "", "stderr": (exc.stderr or "")[-12000:] if exc.stderr else ""}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 def project_commands() -> list[str]:
     return db.get_setting("project_commands", []) or []
 
