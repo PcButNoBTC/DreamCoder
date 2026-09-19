@@ -22,6 +22,7 @@ from models import (
     OpenAICompatibleModel,
 )
 from project_index import ProjectIndex
+from provider_runtime import runtime as provider_runtime
 
 
 # Display name → adapter factory
@@ -143,7 +144,8 @@ class AIRouter:
                 return cached
 
         model = self.get_model(model_name)
-        result = await model.complete(context)
+        provider = getattr(model, 'backend', None) or model.__class__.__name__
+        result = await provider_runtime.call(provider, lambda: model.complete(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
 
         if use_cache:
             self.cache.put(model_name, context, result)
@@ -178,7 +180,8 @@ class AIRouter:
         if context.mode == "project":
             context.project_context = self._project_context()
         model = self.get_model(model_name)
-        return await model.chat(context)
+        provider = getattr(model, 'backend', None) or model.__class__.__name__
+        return await provider_runtime.call(provider, lambda: model.chat(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
 
     def _project_context(self) -> str:
         files = self.index.list_files()
@@ -202,3 +205,7 @@ class AIRouter:
 
     def index_file(self, path: str, content: str, language: str = "python"):
         return self.index.index_file(path, content, language)
+
+
+    def provider_status(self) -> dict[str,Any]:
+        return provider_runtime.snapshot()
