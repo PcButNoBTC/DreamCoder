@@ -116,9 +116,9 @@ class AIRouter:
     def _project_context(self) -> str:
         files = self.index.list_files()
         chunks: list[str] = []
-        for f in files[:20]:
+        for f in files[:12]:
             full = self.index.get_file(f["path"]) or {}
-            content = (full.get("content") or "")[:1800]
+            content = (full.get("content") or "")[:1200]
             chunks.append(f"# --- {f['path']} ---\\n{content}")
         return "\\n\\n".join(chunks) or "(project index is empty)"
 
