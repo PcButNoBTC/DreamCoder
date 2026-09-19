@@ -27,6 +27,10 @@ from generator import generate_project, generate_project_with_model, self_heal, 
 from github_sync import github_sync
 import workspace
 from agent.api import router as agent_router
+from production import readiness, diagnostics, init as production_init
+from project_memory import memory
+from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
+from security import capabilities
 
 # ---------------------------------------------------------------------------
 app = FastAPI(
@@ -49,6 +53,7 @@ app.add_middleware(
 
 router = AIRouter()
 db.init_db()
+production_init()
 
 # Seed demo files if empty
 if not router.index.list_files():
@@ -215,6 +220,45 @@ async def root():
         ],
     }
 
+
+@app.get("/api/production/readiness")
+async def production_readiness():
+    return readiness()
+
+@app.get("/api/production/diagnostics")
+async def production_diagnostics():
+    return diagnostics(str(workspace.root()) if workspace.root() else None)
+
+@app.get("/api/production/capabilities")
+async def production_capabilities():
+    return capabilities()
+
+@app.get("/api/project/graph")
+async def project_graph(limit:int=500):
+    return memory.graph(limit)
+
+@app.post("/api/project/graph/reindex")
+async def project_graph_reindex():
+    root = workspace.root()
+    if root is None: raise HTTPException(400, "No workspace configured")
+    return memory.index(str(root))
+
+@app.get("/api/workspace/checkpoints")
+async def workspace_checkpoints():
+    return {"checkpoints": list_checkpoints(str(workspace.root())) if workspace.root() else []}
+
+@app.post("/api/workspace/checkpoint")
+async def workspace_checkpoint(body:dict={}):
+    root = workspace.root()
+    if root is None: raise HTTPException(400, "No workspace configured")
+    return create_checkpoint(str(root), body.get("reason","manual"))
+
+@app.post("/api/workspace/checkpoint/restore")
+async def workspace_checkpoint_restore(body:dict={}):
+    if not body.get("path"): raise HTTPException(400, "checkpoint path required")
+    root = workspace.root()
+    if root is None: raise HTTPException(400, "No workspace configured")
+    return restore_checkpoint(str(root), body["path"], bool(body.get("dry_run",False)))
 
 @app.get("/api/health")
 async def health(model: Optional[str] = None):
@@ -978,15 +1022,18 @@ async def api_generate_project_build(req: GenerateProjectBuildRequest):
     stack = req.stack or {}
     lang = (stack.get("language") or "").lower()
     name = re.sub(r"[^A-Za-z0-9._-]", "-", req.name or "").strip("-._") or "generated-app"
+    # Build from the actual generated tree. Never assume the model created a directory named after the project.
+    root_files = {str(p).replace("\\\\","/") for p in written}
+    has = lambda suffix: any(p.endswith(suffix) for p in root_files)
     build_commands = {
-        "python": f"python -m compileall -q {name}",
-        "cpp": f"cmake -S {name} -B {name}/build && cmake --build {name}/build --config Release",
-        "c": f"make -C {name}",
-        "typescript": f"cd {name} && npm install --no-audit --no-fund && npm run build --if-present",
-        "csharp": f"dotnet build {name} --nologo",
-        "rust": f"cargo check --manifest-path {name}/Cargo.toml",
-        "go": f"cd {name} && go build ./...",
-        "java": f"cd {name} && mvn -q test",
+        "python": "python -m compileall -q .",
+        "cpp": "cmake -S . -B build && cmake --build build --config Release",
+        "c": "make",
+        "typescript": "npm install --no-audit --no-fund && npm run build --if-present",
+        "csharp": "dotnet build --nologo",
+        "rust": "cargo check",
+        "go": "go build ./...",
+        "java": "mvn -q test",
         "html": "python -m http.server --help",
     }
     command = build_commands.get(lang)
