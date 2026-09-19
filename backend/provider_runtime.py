@@ -16,6 +16,9 @@ class ProviderRuntime:
     def __init__(self):
         self.stats:dict[str,ProviderStats]={}; self.capabilities:dict[str,set[str]]={}
     def register(self,provider:str,capabilities:set[str]|None=None): self.capabilities[provider]=capabilities or {"chat","code","json"}
+    def rank(self,providers=None):
+        names=providers or list(self.stats)
+        return sorted(names,key=lambda p: ((self.stats.get(p,ProviderStats()).success_rate or 0.5)*0.65 + (1/(1+self.stats.get(p,ProviderStats()).avg_latency_ms))*0.35),reverse=True)
     def record_usage(self,provider:str,input_tokens:int=0,output_tokens:int=0,cost_usd:float|None=None):
         s=self.stats.setdefault(provider,ProviderStats()); total=input_tokens+output_tokens; s.tokens+=total
         if cost_usd is not None: s.cost+=float(cost_usd)
