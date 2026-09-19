@@ -41,14 +41,22 @@ class Session:
             if not data:break
             await self.queue.put(data.decode(errors="replace"))
     async def write(self,data):
+        if os.name!="nt":
+            if not self.proc:return
+            os.write(self.master,data.encode()); return
+        if getattr(self,"winpty",None):
+            self.winpty.write(data); return
         if not self.proc:return
-        if os.name!="nt":os.write(self.master,data.encode())
-        elif getattr(self,"winpty",None): self.winpty.write(data)
-        elif self.proc.stdin:self.proc.stdin.write(data.encode()); await self.proc.stdin.drain()
+        if self.proc.stdin:self.proc.stdin.write(data.encode()); await self.proc.stdin.drain()
+
     async def resize(self,cols,rows):
         if os.name!="nt" and self.master:
             import fcntl,termios,struct
             fcntl.ioctl(self.master,termios.TIOCSWINSZ,struct.pack("HHHH",rows,cols,0,0))
+        elif getattr(self,"winpty",None):
+            try:self.winpty.setwinsize(cols,rows)
+            except Exception:pass
+
     async def stop(self):
         if os.name=="nt" and getattr(self,"winpty",None):
             self.winpty.terminate(); return
