@@ -39,7 +39,17 @@
       "provider": "github",
       "owner": "PcButNoBTC",
       "repo": "DreamCoder"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "backend-dist/dreamcoder-backend",
+        "to": "backend/dreamcoder-backend"
+      },
+      {
+        "from": "backend-dist/dreamcoder-backend.exe",
+        "to": "backend/dreamcoder-backend.exe"
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^33.0.0",
