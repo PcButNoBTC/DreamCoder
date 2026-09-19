@@ -93,3 +93,17 @@ def read_file(path: str) -> str:
 
 def git(args: list[str], timeout: int = 60) -> dict[str, Any]:
     return _run(["git", *args], timeout=timeout)
+
+def project_commands() -> list[str]:
+    return db.get_setting("project_commands", []) or []
+
+
+def run_project_command(name_or_command: str, timeout: int = 120) -> dict[str, Any]:
+    commands = project_commands()
+    command = name_or_command
+    aliases = {"test": 0, "build": 1, "dev": 2, "lint": 3, "format": 4}
+    if name_or_command in aliases and aliases[name_or_command] < len(commands):
+        command = commands[aliases[name_or_command]]
+    if not command:
+        return {"ok": False, "error": "No project command configured"}
+    return _run(["sh", "-lc", command], timeout=timeout)
