@@ -189,23 +189,17 @@ Folder contents:
 {context}
 """.strip()
 
-    from models.base import ChatContext
-    result = await router.chat(
-        model_name,
-        ChatContext(
-            message=prompt,
-            mode="analysis",
-            project_goal=project_goal,
-            project_context=context,
-        ),
-        use_cache=False,
-    )
-    parsed = _extract_json(result.content)
+    result = await router.recommend(model_name, prompt, expected_format="json")
+    if not result.get("ok"):
+        base["model_analysis"]={"status":"no_usable_response","error":result.get("error"),"losers":result.get("losers",[])}
+        base["latency_ms"]=int((time.perf_counter()-start)*1000)
+        return base
+    parsed = _extract_json(result["content"])
     if not parsed:
         base["model_analysis"] = {
             "status": "invalid_response",
-            "model": result.model,
-            "backend": result.backend,
+            "model": result.get("model"),
+            "backend": result.get("winning_lane"),
             "raw": result.content[:4000],
         }
         base["latency_ms"] = int((time.perf_counter() - start) * 1000)
