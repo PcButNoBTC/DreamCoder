@@ -913,6 +913,8 @@ async def github_oauth_callback(code:str="",state:str="",error:str=""):
 async def github_oauth_status(): return await github_auth.user()
 @app.get("/api/github/oauth/installations")
 async def github_oauth_installations(): return await github_auth.installations()
+@app.post("/api/github/app/installation-token")
+async def github_app_installation_token(body:dict): return await github_auth.app_installation_token(int(body.get("installation_id",0)))
 @app.get("/api/github/oauth/repositories")
 async def github_oauth_repositories(installation_id:int|None=None): return await github_auth.repositories(installation_id)
 @app.post("/api/github/oauth/refresh-token")
