@@ -110,8 +110,8 @@ class AgentRuntime:
         run=self.get(run_id)
         if run.status not in ("awaiting_approval","repair_needed"): return run
         run.status="executing"; self._persist(run); self._event(run,"approval.granted")
-        if req is None: req=AgentRequest(goal=run.goal,cwd=run.cwd,model=run.model,auto_apply=True)
-        else: req.auto_apply=True; req.model=run.model or req.model
+        if req is None: req=AgentRequest(goal=run.goal,cwd=run.cwd,model=run.model,auto_apply=False)
+        else: req.model=run.model or req.model
         return await self._execute(run,req)
 
     async def _execute(self, run: AgentRun, req: AgentRequest) -> AgentRun:
