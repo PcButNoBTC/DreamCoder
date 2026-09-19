@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 import httpx
 
-from .base import BaseModel, CodeContext, InferenceResult, Suggestion
+from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
 
 
 class OllamaModel(BaseModel):
@@ -73,6 +73,31 @@ class OllamaModel(BaseModel):
             ],
             health={"score": 91, "backend": "ollama"},
         )
+
+    async def chat(self, context: ChatContext) -> ChatResult:
+        start = time.perf_counter()
+        system = (
+            "You are the selected DreamCoder coding assistant. Answer the user's request directly. "
+            "Do not claim to have changed files or run commands unless the tool system actually did so."
+        )
+        if context.mode == "project":
+            system += "\\n\\nProject context:\\n" + (context.project_context or "(no project context available)")
+            if context.project_goal:
+                system += "\\nProject goal: " + context.project_goal
+        history = "\\n".join(f"{m.get('role','user')}: {m.get('content','')}" for m in context.history[-8:])
+        prompt = system + ("\\n\\nConversation:\\n" + history if history else "") + "\\n\\nuser: " + context.message + "\\nassistant:"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": self.model_name, "prompt": prompt, "stream": False,
+                          "options": {"temperature": 0.3, "num_predict": 1200}},
+                )
+                resp.raise_for_status()
+                raw = resp.json().get("response", "").strip()
+                return ChatResult(content=raw or "(empty model response)", latency_ms=int((time.perf_counter()-start)*1000), model=f"Ollama/{self.model_name}", backend="ollama")
+        except Exception as exc:
+            return ChatResult(content=f"Selected model Ollama/{self.model_name} is unavailable: {exc}", latency_ms=int((time.perf_counter()-start)*1000), model=f"Ollama/{self.model_name}", backend="ollama", cached=False)
 
     async def health_check(self) -> dict[str, Any]:
         try:
