@@ -86,8 +86,9 @@ class AgentRuntime:
                 "Return ONLY JSON: {\"changes\":[{\"path\":\"relative/path\",\"content\":\"complete file content\",\"summary\":\"why\"}]}\n"
                 f"Goal: {req.goal}\nPlan:\n{plan}\nRepair context:\n{repair_context or 'none'}\nWorkspace snapshot:\n{project}")
         from models.base import ChatContext
-        result=await self.router.chat(req.model,ChatContext(message=prompt,mode="project",project_goal=db.get_setting("project_goal","") or "",project_context=project),use_cache=False)
-        parsed=self._extract_json(result.content)
+        result=await self.router.recommend(req.model,prompt,expected_format="json")
+        if not result.get("ok"): return []
+        parsed=self._extract_json(result.get("content",""))
         changes=(parsed or {}).get("changes",[]) if isinstance(parsed,dict) else []
         valid=[]
         for item in changes:
@@ -98,7 +99,7 @@ class AgentRuntime:
             target=Path(req.cwd)/rel
             old_content=target.read_text(encoding="utf-8") if target.exists() else ""
             diff="".join(difflib.unified_diff(old_content.splitlines(True),new_content.splitlines(True),fromfile=rel,tofile=rel))
-            valid.append({"path":rel,"content":new_content,"summary":str(item.get("summary","")),"diff":diff})
+            valid.append({"path":rel,"content":new_content,"summary":str(item.get("summary","")),"diff":diff,"change_type":self._classify_change(req,rel,run)})
         return valid[:8]
 
     async def _plan(self, req: AgentRequest) -> list[PlanStep]:
@@ -119,8 +120,25 @@ class AgentRuntime:
             pass
         return [PlanStep("inspect", "Inspect the project", "Find files relevant to the goal.", ["git_status","search"], False), PlanStep("change", "Generate the code changes", "Produce a reviewable project change.", ["read_file","write_file"], True), PlanStep("validate", "Run project tests", "Validate the change.", ["test"], False)]
 
+    def _classify_change(self, req: AgentRequest, rel_path: str, run: AgentRun) -> str:
+        cwd=Path(req.cwd).resolve()
+        dreamcoder_root=Path(__file__).resolve().parents[2]
+        p=(cwd/rel_path).resolve()
+        try:
+            p.relative_to(dreamcoder_root)
+            in_dreamcoder=True
+        except ValueError:
+            in_dreamcoder=False
+        if not in_dreamcoder:
+            return "APP_CREATE" if not p.exists() else "APP_MODIFY"
+        if "frontend/" in rel_path.replace("\\","/") or rel_path.endswith((".css",".html")):
+            return "UI_MODIFY"
+        if rel_path.endswith((".env",".env.example","config.py")) or "config" in rel_path.lower():
+            return "CONFIG_MODIFY"
+        return "PROJECT_MODIFY"
+
     async def _call(self, run: AgentRun, tools: ToolRegistry, tool: str, args: dict[str, Any]) -> dict[str, Any]:
-        call = ToolCall(id=uuid.uuid4().hex, tool=tool, args=args, status="running")
+        call = ToolCall(id=uuid.uuid4().hex, tool=tool, args=args, status="running", change_type=str(args.get("change_type","")))
         run.tool_calls.append(call); self._persist(run); self._event(run, "tool.started", tool=tool, args=args)
         try:
             output = tools.dispatch(tool, args); call.output = output; call.status = "completed"; self._persist(run); self._event(run, "tool.completed", tool=tool, output=output)
@@ -159,9 +177,18 @@ class AgentRuntime:
             if not req.auto_apply:
                 run.status="awaiting_approval"; self._persist(run); return run
             for change in changes:
-                await self._call(run,tools,"write_file",{"path":change["path"],"content":change["content"]})
+                await self._call(run,tools,"write_file",{"path":change["path"],"content":change["content"],"change_type":change.get("change_type","PROJECT_MODIFY")})
                 sync = await github_sync.sync_file(change["path"], change["content"], f"DreamCoder agent: {run.goal[:80]}")
                 self._event(run, "github.sync", path=change["path"], result=sync)
+                if not sync.get("ok") and not sync.get("skipped"):
+                    try:
+                        from backup_manager import write_backup
+                        backup=write_backup(req.cwd,change["path"],change["content"],reason=f"github sync failed: {sync.get('error','unknown')}")
+                    except Exception as exc:
+                        backup={"ok":False,"error":str(exc)}
+                    warning={"path":change["path"],"sync_error":sync.get("error","unknown"),"sync_status":sync.get("status_code"),"backup_path":backup.get("path"),"backup_ok":backup.get("ok",False)}
+                    run.sync_warnings.append(warning)
+                    self._event(run,"github.sync.failed",**warning)
         else:
             self._event(run,"changes.none")
         run.status="validating"; self._persist(run)
