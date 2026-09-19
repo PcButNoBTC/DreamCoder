@@ -15,6 +15,10 @@ import time
 from typing import Any, Optional
 
 from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
+try:
+    from quota_tracker import record_response as _record_quota
+except Exception:
+    def _record_quota(headers, status): pass
 
 
 class HuggingFaceModel(BaseModel):
@@ -67,7 +71,7 @@ class HuggingFaceModel(BaseModel):
                     headers=headers,
                     json=payload,
                 )
-                resp.raise_for_status()
+                _record_quota(dict(resp.headers), resp.status_code)\n                _record_quota(dict(resp.headers), resp.status_code)\n                resp.raise_for_status()
                 data = resp.json()
                 raw = data[0]["generated_text"] if isinstance(data, list) else str(data)
         except Exception as exc:
