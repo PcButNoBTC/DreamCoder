@@ -90,6 +90,9 @@ class ToolRegistry:
         except Exception:
             pass
         return {"ok": overall_ok, "command": command, "segments": outputs,
+                "exit_code": 0 if overall_ok else 1,
+                "stdout": "\n".join(str(x.get("stdout","")) for x in outputs),
+                "stderr": "\n".join(str(x.get("stderr","")) for x in outputs),
                 "latency_ms": latency, "unrestricted": unrestricted_mode()}
 
     def test(self, command: str = "") -> dict[str, Any]:
