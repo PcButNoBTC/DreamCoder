@@ -16,10 +16,10 @@ def redact(text:str)->str:
 def safe_path(root:str|Path, relative:str, allow_missing=True)->Path:
     base=Path(root).expanduser().resolve(); rel=Path(relative)
     raw=str(relative).replace("\\\\","/")
-    if re.match(r"^[A-Za-z]:/",raw) or raw.startswith("//") or rel.is_absolute() or ".." in rel.parts: raise PermissionError("path escapes workspace")
+    if re.match(r"^[A-Za-z]:/",raw) or raw.startswith("/") or raw.startswith("//") or rel.is_absolute() or ".." in rel.parts: raise PermissionError("path escapes workspace")
     target=(base/rel).resolve(strict=not allow_missing)
     if target!=base and base not in target.parents: raise PermissionError("path escapes workspace")
-    if target.is_symlink(): raise PermissionError("symlink targets are not allowed")
+    if target.is_symlink() or any(part.is_symlink() for part in [base.joinpath(*rel.parts[:i]) for i in range(1,len(rel.parts)+1)] if part.exists()): raise PermissionError("symlink targets are not allowed")
     return target
 def capabilities()->dict[str,bool]:
     return {"read_workspace":True,"write_workspace":True,"execute":os.getenv("DREAMCODER_AGENT_UNRESTRICTED","0")=="1","network":os.getenv("DREAMCODER_AGENT_NETWORK","0")=="1","git":True,"github":bool(os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN"))}
