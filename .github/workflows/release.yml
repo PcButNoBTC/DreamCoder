@@ -9,6 +9,11 @@ permissions:
   id-token: write
   attestations: write
 
+env:
+  SOURCE_DATE_EPOCH: 0
+  id-token: write
+  attestations: write
+
 jobs:
   release:
     strategy:
