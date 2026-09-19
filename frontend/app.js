@@ -247,7 +247,8 @@ async function saveCurrentFileLive() {
     } else {
       setGithubSyncState("sync error", "error");
       setStatus("Saved · GitHub sync failed");
-      showSyncBanner("Local save succeeded, but GitHub sync failed", "error", gh.backup?.path || "");\n      toast("Local save succeeded, but GitHub sync failed", "error");
+      showSyncBanner("Local save succeeded, but GitHub sync failed", "error", gh.backup?.path || "");
+      toast("Local save succeeded, but GitHub sync failed", "error");
     }
   } catch (err) {
     setGithubSyncState("sync error", "error");
