@@ -381,7 +381,7 @@ async def terminal_session_kill(session_id:str):
 async def terminal_session_info(session_id:str):
     s=SESSIONS.get(session_id)
     if not s: raise HTTPException(404,"session not found")
-    return {"id":s.id,"pid":s.proc.pid if s.proc else None,"returncode":s.proc.returncode if s.proc else None,"command":s.command,"cwd":s.cwd}
+    return {"id":s.id,"pid":getattr(s,"pid",None) or (s.proc.pid if s.proc else None),"returncode":(s.proc.returncode if s.proc else (0 if getattr(s,"winpty",None) and not s.winpty.isalive() else None)),"command":s.command,"cwd":s.cwd}
 
 @app.websocket("/ws/terminal/{session_id}")
 async def terminal_socket(ws:WebSocket,session_id:str):
