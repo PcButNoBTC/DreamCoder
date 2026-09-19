@@ -2836,3 +2836,60 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   setInterval(refreshQuota,30000);
   console.log("DreamCoder UI ready");
 })();
+
+
+/* Production control center: GitHub, Git, terminal, recovery and settings. */
+(function productionUI(){
+  const style=document.createElement("style"); style.textContent=".dc-prod{position:fixed;right:16px;bottom:48px;width:min(620px,94vw);max-height:72vh;overflow:auto;z-index:10000;background:#111722;border:1px solid var(--border);border-radius:12px;box-shadow:0 20px 70px #0008;padding:12px}.dc-tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}.dc-tabs button,.dc-prod button{border:1px solid var(--border);background:#0d1118;color:var(--text);border-radius:6px;padding:6px 9px;cursor:pointer}.dc-tabs button.active{border-color:var(--accent)}.dc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.dc-grid input,.dc-prod select{width:100%;box-sizing:border-box;background:#0b1018;color:var(--text);border:1px solid var(--border);padding:7px;border-radius:6px}.dc-row{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}.dc-log{background:#080b10;padding:8px;border-radius:7px;white-space:pre-wrap;font:10px ui-monospace;max-height:220px;overflow:auto}.dc-ok{color:var(--accent2)}.dc-err{color:var(--danger)}";document.head.appendChild(style);
+  const b=document.createElement("button");b.className="chip";b.textContent="⚙ Production";b.style.position="fixed";b.style.right="12px";b.style.bottom="12px";b.style.zIndex="9999";document.body.appendChild(b);
+  const box=document.createElement("div");box.className="dc-prod";box.hidden=true;document.body.appendChild(box);
+  const tabs=["GitHub","Git","Terminal","Settings","Recovery","Diagnostics"];
+  function shell(tab){
+    box.innerHTML='<div class="dc-tabs">'+tabs.map(x=>'<button data-tab="'+x+'">'+x+'</button>').join("")+'<button data-close>×</button></div><div id="dc-body"></div>';
+    box.querySelectorAll("[data-tab]").forEach(x=>x.onclick=()=>render(x.dataset.tab));
+    box.querySelector("[data-close]").onclick=()=>box.hidden=true; render(tab);
+  }
+  async function post(path,body){return api(path,{method:"POST",body:JSON.stringify(body||{})})}
+  async function render(tab){
+    const body=box.querySelector("#dc-body"); body.innerHTML="<div class=muted>Loading…</div>";
+    if(tab==="GitHub"){
+      const me=await api("/api/github/me").catch(()=>({connected:false})); const cfg=await api("/api/github/oauth/config").catch(()=>({configured:false}));
+      const repos=me.connected?await api("/api/github/repositories").catch(()=>({repositories:[]})):{repositories:[]};
+      body.innerHTML='<h3>GitHub connection</h3><div class="muted">'+(me.connected?"Connected as "+escapeHtml(me.login):"Not connected")+'</div><div class=dc-row>'+(me.connected?'<button id=dcDisconnect>Disconnect</button>':'<button id=dcConnect>Connect GitHub</button>')+'</div><div class=dc-grid><select id=dcRepo>'+repos.repositories.map(x=>'<option value="'+escapeHtml(x.full_name)+'">'+escapeHtml(x.full_name)+'</option>').join("")+'</select><input id=dcBranch placeholder="branch (main)"/></div><div class=dc-row><button id=dcRepoSet>Use repository</button><button id=dcRefreshRepos>Refresh repositories</button></div><div id=dcGhLog class=dc-log></div>';
+      body.querySelector("#dcConnect")?.addEventListener("click",()=>{ if(!cfg.configured){toast("Set DREAMCODER_GITHUB_CLIENT_ID/SECRET and OAUTH_STATE_SECRET first","error");return;} window.open(API_BASE+"/api/github/oauth/start","_blank","width=900,height=800"); setTimeout(()=>render("GitHub"),3000);});
+      body.querySelector("#dcDisconnect")?.addEventListener("click",async()=>{await post("/api/github/disconnect");render("GitHub")});
+      body.querySelector("#dcRepoSet")?.addEventListener("click",async()=>{const d=await post("/api/github/select-repository",{repo:body.querySelector("#dcRepo").value,branch:body.querySelector("#dcBranch").value||"main"});body.querySelector("#dcGhLog").textContent=JSON.stringify(d,null,2);refreshGithubSyncStatus()});
+      body.querySelector("#dcRefreshRepos")?.addEventListener("click",()=>render("GitHub"));
+      return;
+    }
+    if(tab==="Git"){
+      const s=await api("/api/git/workflow/status").catch(e=>({error:String(e)})); const br=await api("/api/git/workflow/branches").catch(e=>({error:String(e)}));
+      body.innerHTML='<h3>Git workflow</h3><div class=dc-row><button data-git=fetch>Fetch</button><button data-git=pull>Pull</button><button data-git=push>Push</button><button data-git=stash>Stash</button><button data-git=merge>Merge</button></div><div class=dc-grid><input id=dcBranchName placeholder="new/switch branch"/><button data-git=branch>Create & switch branch</button><input id=dcCommit placeholder="commit message"/><button data-git=commit>Commit staged</button></div><pre class=dc-log>'+escapeHtml(JSON.stringify({status:s,branches:br},null,2))+'</pre>';
+      body.querySelectorAll("[data-git]").forEach(x=>x.onclick=async()=>{const op=x.dataset.git;let d;if(op==="branch")d=await post("/api/git/workflow/branch",{name:body.querySelector("#dcBranchName").value});else if(op==="commit")d=await post("/api/git/workflow/commit",{message:body.querySelector("#dcCommit").value});else if(op==="merge")d=await post("/api/git/workflow/merge",{branch:prompt("Branch to merge")||""});else d=await post("/api/git/workflow/"+op,{}); body.querySelector(".dc-log").textContent=JSON.stringify(d,null,2);});
+      return;
+    }
+    if(tab==="Terminal"){
+      body.innerHTML='<h3>PTY Terminal</h3><div class=dc-row><input id=dcTermCmd value="'+escapeHtml(localStorage.getItem("dc_term_cmd")||"")+'" placeholder="command"/><button id=dcTermStart>Start</button><button id=dcTermStop>Stop</button></div><div id=dcTermLog class=dc-log></div>';
+      let socket=null,current=null;
+      body.querySelector("#dcTermStart").onclick=async()=>{const cmd=body.querySelector("#dcTermCmd").value;localStorage.setItem("dc_term_cmd",cmd);const d=await post("/api/terminal/session",{command:cmd});current=d.id;socket=new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.hostname+":8000/ws/terminal/"+d.id);socket.onmessage=e=>body.querySelector("#dcTermLog").textContent+=e.data;socket.onopen=()=>socket.send(JSON.stringify({op:"resize",cols:120,rows:30}));};
+      body.querySelector("#dcTermStop").onclick=()=>socket?.send(JSON.stringify({op:"signal",signal:"SIGINT"})); return;
+    }
+    if(tab==="Settings"){
+      body.innerHTML='<h3>DreamCoder settings</h3><div class=dc-grid><label>AI timeout<input id=sTimeout value="'+escapeHtml(localStorage.getItem("dc_ai_timeout")||"120")+'"/></label><label>Security mode<select id=sMode><option value="restricted">Restricted</option><option value="unrestricted">Unrestricted</option></select></label><label>Agent network<select id=sNet><option value="0">Disabled</option><option value="1">Enabled</option></select></label><label>Build command<input id=sBuild placeholder="python -m pytest -q"/></label><label>Test command<input id=sTest placeholder="python -m pytest -q"/></label></div><div class=dc-row><button id=sSave>Save workspace settings</button></div><pre id=sLog class=dc-log></pre>';
+      body.querySelector("#sSave").onclick=async()=>{localStorage.setItem("dc_ai_timeout",body.querySelector("#sTimeout").value);const d=await post("/api/project/context",{commands:[body.querySelector("#sBuild").value,body.querySelector("#sTest").value].filter(Boolean)}).catch(e=>({error:String(e)}));body.querySelector("#sLog").textContent=JSON.stringify(d,null,2);toast("Settings saved locally","success")}; return;
+    }
+    if(tab==="Recovery"){
+      const d=await api("/api/workspace/checkpoints").catch(()=>({checkpoints:[]})); body.innerHTML='<h3>Recovery</h3><div class=dc-row><button id=dcCp>Create checkpoint</button><button id=dcRestore>Restore selected</button></div><select id=dcCps size=6 style="width:100%">'+(d.checkpoints||[]).map(x=>'<option value="'+escapeHtml(x.path)+'">'+escapeHtml(x.created_at||x.path)+' · '+escapeHtml(x.reason||"")+'</option>').join("")+'</select><div class=dc-log>Unsaved editor buffers are continuously stored in local browser storage.</div>';
+      body.querySelector("#dcCp").onclick=async()=>{const x=await post("/api/workspace/checkpoint",{reason:"manual-ui"});toast(x.ok?"Checkpoint created":"Checkpoint failed",x.ok?"success":"error");render("Recovery")};
+      body.querySelector("#dcRestore").onclick=async()=>{const p=body.querySelector("#dcCps").value;if(!p)return;const x=await post("/api/workspace/checkpoint/restore",{path:p});toast(x.ok?"Workspace restored":"Restore failed",x.ok?"success":"error")}; return;
+    }
+    const d=await api("/api/production/diagnostics").catch(e=>({error:String(e)})); body.innerHTML='<h3>Diagnostics</h3><pre class=dc-log>'+escapeHtml(JSON.stringify(d,null,2))+'</pre>';
+  }
+  b.onclick=()=>{box.hidden=!box.hidden;if(!box.hidden)shell("GitHub")};
+  /* crash-safe editor recovery */
+  const key="dc_recovery_"+(location.pathname||"root");
+  const saved=localStorage.getItem(key);
+  if(saved && editor && !editor.value && saved!==editor.value){try{const x=JSON.parse(saved);if(x.content && confirm("Recover unsaved DreamCoder editor buffer for "+x.path+"?")){editor.value=x.content;currentPath=x.path||currentPath;updateLines();}}catch(_){}}
+  editor?.addEventListener("input",()=>{try{localStorage.setItem(key,JSON.stringify({path:currentPath,content:editor.value,ts:Date.now()}))}catch(_){}});
+  window.addEventListener("beforeunload",()=>{try{localStorage.setItem(key,JSON.stringify({path:currentPath,content:editor.value,ts:Date.now()}))}catch(_){}});
+})();
