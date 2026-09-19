@@ -91,6 +91,31 @@ class GitHubSync:
                 "created": not bool(sha),
             }
 
+
+    async def delete_file(self, path: str, message: str | None = None) -> dict[str, Any]:
+        if not self.configured:
+            return {"ok": False, "skipped": True, "reason": "GitHub autosync is not configured"}
+        path = path.replace("\\", "/").lstrip("/")
+        if not path or path.startswith(".git/") or ".." in path.split("/"):
+            return {"ok": False, "skipped": True, "reason": "Invalid repository path"}
+        url = f"https://api.github.com/repos/{self.repo}/contents/{path}"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            get = await client.get(url, params={"ref": self.branch}, headers=self._headers())
+            if get.status_code == 404:
+                return {"ok": True, "skipped": True, "reason": "Already absent"}
+            if get.status_code != 200:
+                return {"ok": False, "status_code": get.status_code, "error": get.text[:1000]}
+            sha = get.json().get("sha")
+            result = await client.request("DELETE", url, headers=self._headers(), json={
+                "message": message or f"DreamCoder live delete: {path}",
+                "sha": sha,
+                "branch": self.branch,
+            })
+            if result.status_code != 200:
+                return {"ok": False, "status_code": result.status_code, "error": result.text[:1200]}
+            data = result.json()
+            return {"ok": True, "path": path, "branch": self.branch, "commit_sha": (data.get("commit") or {}).get("sha")}
+
     async def sync_files(self, files: list[dict[str, str]], message: str = "DreamCoder live sync") -> dict[str, Any]:
         results = []
         for item in files:
