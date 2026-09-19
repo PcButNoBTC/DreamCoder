@@ -31,6 +31,7 @@ from production import readiness, diagnostics, init as production_init
 from project_memory import memory
 from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
 from security import capabilities
+from credentials import status as credential_status
 
 # ---------------------------------------------------------------------------
 app = FastAPI(
@@ -230,6 +231,10 @@ async def production_readiness():
 @app.get("/api/production/diagnostics")
 async def production_diagnostics():
     return diagnostics(str(workspace.root()) if workspace.root() else None)
+
+@app.get("/api/credentials/status")
+async def credentials_status():
+    return credential_status()
 
 @app.get("/api/production/capabilities")
 async def production_capabilities():
