@@ -272,3 +272,33 @@ API endpoints:
 - `POST /api/files/save` — local index save plus GitHub sync by default
 
 This is intentionally a **save-based live sync**, not a commit for every keystroke. It keeps Git history usable while making the IDE's development state continuously progress on the configured GitHub branch.
+
+
+## Canonical workspace + Git runtime
+
+DreamCoder now treats a configured **workspace directory as the canonical project state**. The project index describes that workspace; it is no longer intended to be a disconnected copy.
+
+When a workspace is active:
+- filesystem edits are watched and re-indexed;
+- IDE saves write through to the workspace;
+- Git branch/HEAD/working-tree state is visible in the IDE;
+- configured project commands can be executed by the runtime;
+- Agent tests use the project's configured test command when available;
+- GitHub synchronization snapshots the canonical workspace rather than stale browser buffers;
+- GitHub CI validates pushes and pull requests.
+
+Configure a workspace directly with the backend API or start the file watcher for a local project folder. Starting the watcher automatically makes that folder the canonical workspace.
+
+Project commands are stored through **Project Context**. The first configured command is treated as the test command, followed by build/dev/lint/format slots.
+
+The intended development loop is now:
+
+```text
+Workspace ↔ Editor ↔ Agent ↔ Tests
+      ↕             ↕
+     Git ← Project Memory
+      ↕
+   GitHub ↔ CI
+```
+
+Git operations exposed by the workspace runtime include status, diff, log, branch/switch, add, commit, fetch, pull and push. Write/destructive operations remain subject to the Agent approval model.
