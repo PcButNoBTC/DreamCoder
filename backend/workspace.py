@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import signal
 from pathlib import Path
 from typing import Any
 
@@ -63,31 +64,21 @@ def status() -> dict[str, Any]:
     }
 
 
-def write_file(path: str, content: str) -> dict[str, Any]:
+def _safe_target(rel: str, *, allow_missing: bool = True) -> Path:
     p = root()
-    if p is None:
-        raise ValueError("No workspace configured")
-    rel = Path(path)
-    if rel.is_absolute() or ".." in rel.parts:
-        raise ValueError("Invalid workspace path")
-    target = (p / rel).resolve()
-    if p not in target.parents and target != p:
-        raise ValueError("Path escapes workspace")
+    if p is None: raise ValueError("No workspace configured")
+    from security import safe_path
+    return safe_path(p, rel, allow_missing=allow_missing)
+
+def write_file(path: str, content: str) -> dict[str, Any]:
+    target = _safe_target(path, allow_missing=True)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
-    return {"ok": True, "path": str(target.relative_to(p)).replace("\\", "/")}
+    return {"ok": True, "path": str(target.relative_to(root())).replace("\\\\", "/")}
 
 
 def read_file(path: str) -> str:
-    p = root()
-    if p is None:
-        raise ValueError("No workspace configured")
-    rel = Path(path)
-    if rel.is_absolute() or ".." in rel.parts:
-        raise ValueError("Invalid workspace path")
-    target = (p / rel).resolve()
-    if p not in target.parents:
-        raise ValueError("Path escapes workspace")
+    target = _safe_target(path, allow_missing=False)
     return target.read_text(encoding="utf-8")
 
 
@@ -135,3 +126,22 @@ def run_project_command(name_or_command: str, timeout: int = 120) -> dict[str, A
     if not command:
         return {"ok": False, "error": "No project command configured"}
     return _run(["sh", "-lc", command], timeout=timeout)
+
+
+def create_checkpoint(reason: str = "manual") -> dict[str, Any]:
+    p = root()
+    if p is None: return {"ok": False, "error": "No workspace configured"}
+    from checkpoints import create
+    return create(p, reason)
+
+def list_checkpoints() -> list[dict[str, Any]]:
+    p = root()
+    if p is None: return []
+    from checkpoints import list_checkpoints as _list
+    return _list(p)
+
+def restore_checkpoint(path: str, dry_run: bool = False) -> dict[str, Any]:
+    p = root()
+    if p is None: return {"ok": False, "error": "No workspace configured"}
+    from checkpoints import restore
+    return restore(p, path, dry_run=dry_run)
