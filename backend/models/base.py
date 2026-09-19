@@ -27,6 +27,24 @@ class Suggestion:
 
 
 @dataclass
+class ChatContext:
+    message: str
+    mode: str = "project"
+    project_goal: str = ""
+    project_context: str = ""
+    history: list[dict[str, str]] = field(default_factory=list)
+
+
+@dataclass
+class ChatResult:
+    content: str
+    latency_ms: int
+    model: str
+    backend: str = "unknown"
+    cached: bool = False
+
+
+@dataclass
 class InferenceResult:
     suggestions: list[Suggestion]
     latency_ms: int
@@ -45,6 +63,11 @@ class BaseModel(ABC):
     @abstractmethod
     async def complete(self, context: CodeContext) -> InferenceResult:
         """Return actionable code suggestions for the given context."""
+        ...
+
+    @abstractmethod
+    async def chat(self, context: ChatContext) -> ChatResult:
+        """Answer a conversational request using this exact model adapter."""
         ...
 
     @abstractmethod
