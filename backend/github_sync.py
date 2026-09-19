@@ -81,7 +81,10 @@ class GitHubSync:
         except ValueError as e:return {"ok":False,"skipped":True,"reason":str(e)}
         except Exception as e:return {"ok":False,"error":str(e)}
     async def sync_file(self,path,content,message=None):
-        return await self.sync_files_atomic([{"path":path,"content":content}],message or f"DreamCoder live sync: {path}")
+        try:
+            return await self.sync_files_atomic([{"path":path,"content":content}],message or f"DreamCoder live sync: {path}")
+        except ValueError as exc:
+            return {"ok":False,"skipped":True,"reason":str(exc)}
     async def sync_files(self,files,message="DreamCoder live sync"):
         return await self.sync_files_atomic(files,message)
     async def sync_file_with_backup(self,root,path,content,message=None):
