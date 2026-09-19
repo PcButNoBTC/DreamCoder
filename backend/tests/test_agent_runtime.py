@@ -49,3 +49,16 @@ def test_folder_scope_json_parser():
     from analyzer import _extract_json
     parsed = _extract_json('prefix {"project_type":"desktop IDE","recommendations":[]} suffix')
     assert parsed["project_type"] == "desktop IDE"
+
+
+def test_agent_run_persists_selected_model():
+    from agent.types import AgentRun
+    run = AgentRun(id="x", status="planning", goal="test", cwd="/tmp", model="mock")
+    assert run.to_dict()["model"] == "mock"
+
+
+def test_openai_compatible_suggestion_parser():
+    from models.openai_compatible import OpenAICompatibleModel
+    raw = '[{"title":"Add test","description":"Cover the function","code":"assert True","category":"improvement"}]'
+    parsed = OpenAICompatibleModel._parse_suggestions(raw)
+    assert parsed[0].title == "Add test"
