@@ -5,7 +5,7 @@
  * Run from the electron/ folder after `npm install`.
  */
 
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, dialog, ipcMain } = require("electron");
 const path = require("path");
 const { spawn } = require("child_process");
 
@@ -29,7 +29,7 @@ function startBackend() {
   backendProc.on("exit", (code) => console.log(`backend exited ${code}`));
 }
 
-function createWindow() {
+ipcMain.handle("dreamcoder:choose-folder", async () => {\n  const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });\n  return result.canceled ? null : result.filePaths[0];\n});\n\nfunction createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
