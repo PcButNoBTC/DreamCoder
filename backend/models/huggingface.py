@@ -124,7 +124,7 @@ class HuggingFaceModel(BaseModel):
 
     def _build_chat_prompt(self, context: ChatContext) -> str:
         project = ""
-        if context.mode == "project":
+        if context.project_context:
             project = f"\\nProject goal: {context.project_goal}\\nProject context:\\n{context.project_context}\\n"
         history = "\\n".join(f"{m.get('role','user')}: {m.get('content','')}" for m in context.history[-8:])
         return f"You are the selected DreamCoder assistant. Answer directly and honestly. Do not claim actions you did not perform.{project}\\nConversation:\\n{history}\\nuser: {context.message}\\nassistant:"
