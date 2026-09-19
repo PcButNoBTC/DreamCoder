@@ -156,3 +156,25 @@ class HuggingFaceModel(BaseModel):
             f"### Code:\n{ctx.code}\n\n"
             f"### Response:\n"
         )
+
+
+    async def stream_chat(self, context: ChatContext):
+        import httpx,json
+        prompt=self._build_chat_prompt(context)
+        headers={"Authorization":f"Bearer {self.api_token}","Accept":"text/event-stream"}
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            async with client.stream("POST",f"https://api-inference.huggingface.co/models/{self.model_id}",headers=headers,json={"inputs":prompt,"parameters":{"max_new_tokens":1200,"temperature":0.3},"stream":True}) as resp:
+                _record_quota(dict(resp.headers),resp.status_code); resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line or not line.startswith("data:"): continue
+                    payload=line[5:].strip()
+                    if payload=="[DONE]": break
+                    try:
+                        data=json.loads(payload)
+                        token=data.get("token",{}).get("text") if isinstance(data,dict) else None
+                        if token: yield token
+                        elif isinstance(data,dict) and data.get("generated_text"): yield data["generated_text"]
+                    except Exception: continue
+
+    def _build_chat_prompt(self, context: ChatContext):
+        return "You are the DreamCoder coding assistant. Answer directly.\n"+context.message
