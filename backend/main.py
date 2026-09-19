@@ -336,6 +336,24 @@ async def terminal_session_start(req:TerminalRequest):
     s=await create_terminal_session(req.command,cwd)
     return {"id":s.id,"pid":s.proc.pid if s.proc else None,"command":s.command,"cwd":s.cwd}
 
+@app.post("/api/terminal/session/{session_id}/stop")
+async def terminal_session_stop(session_id:str):
+    s=SESSIONS.get(session_id)
+    if not s: raise HTTPException(404,"session not found")
+    await s.stop(); return {"ok":True,"id":session_id}
+
+@app.post("/api/terminal/session/{session_id}/kill")
+async def terminal_session_kill(session_id:str):
+    s=SESSIONS.get(session_id)
+    if not s: raise HTTPException(404,"session not found")
+    await s.kill(); return {"ok":True,"id":session_id}
+
+@app.get("/api/terminal/session/{session_id}")
+async def terminal_session_info(session_id:str):
+    s=SESSIONS.get(session_id)
+    if not s: raise HTTPException(404,"session not found")
+    return {"id":s.id,"pid":s.proc.pid if s.proc else None,"returncode":s.proc.returncode if s.proc else None,"command":s.command,"cwd":s.cwd}
+
 @app.websocket("/ws/terminal/{session_id}")
 async def terminal_socket(ws:WebSocket,session_id:str):
     await ws.accept(); s=SESSIONS.get(session_id)
