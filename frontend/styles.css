@@ -391,3 +391,9 @@ body.cursor-fx, body.cursor-fx *{cursor:none !important}
 .agent-change{display:flex;flex-direction:column;gap:2px;padding:7px 0;border-top:1px solid var(--border)}
 .agent-change strong{font:9px ui-monospace,monospace;overflow-wrap:anywhere}
 .agent-change span{font-size:9px;color:var(--muted);line-height:1.35}
+
+#githubSyncState{font-size:9px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#githubSyncState[data-state="ready"]{color:var(--accent2)}
+#githubSyncState[data-state="syncing"]{color:var(--warn)}
+#githubSyncState[data-state="error"]{color:var(--danger)}
+#githubSyncState[data-state="off"]{color:var(--muted)}
