@@ -35,6 +35,7 @@ from security import capabilities
 from credentials import status as credential_status
 import github_auth, git_workflow
 from terminal_session import SESSIONS, create as create_terminal_session
+from editor_recovery import three_way_merge
 
 # ---------------------------------------------------------------------------
 app = FastAPI(
@@ -858,6 +859,29 @@ async def github_sync_current():
                 files.append({"path": item["path"], "content": row["content"]})
     return await github_sync.sync_files(files, message="DreamCoder project snapshot")
 
+
+@app.get("/api/files/stat")
+async def file_stat(path:str):
+    root=workspace.root()
+    if not root: raise HTTPException(400,"No workspace")
+    target=(root/path).resolve()
+    if root not in target.parents and target!=root: raise HTTPException(400,"invalid path")
+    if not target.exists(): return {"exists":False,"path":path}
+    st=target.stat()
+    return {"exists":True,"path":path,"mtime_ns":st.st_mtime_ns,"size":st.st_size}
+
+@app.post("/api/files/merge")
+async def file_merge(body:dict):
+    return three_way_merge(body.get("base",""),body.get("current",""),body.get("incoming",""))
+
+@app.post("/api/editor/recovery")
+async def editor_recovery(body:dict):
+    root=workspace.root()
+    if not root: raise HTTPException(400,"No workspace")
+    path=body.get("path",""); target=(root/path).resolve()
+    if root not in target.parents and target!=root: raise HTTPException(400,"invalid path")
+    target.parent.mkdir(parents=True,exist_ok=True); target.write_text(body.get("content",""),encoding="utf-8")
+    return {"ok":True,"path":path}
 
 @app.get("/api/index/stats")
 async def index_stats():
