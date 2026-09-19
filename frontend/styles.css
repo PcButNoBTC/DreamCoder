@@ -25,6 +25,14 @@ button,select,textarea,input{font:inherit}
 .btn.evolve:hover{background:#4de0b822}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .select{min-width:140px;max-width:200px}
+.model-status{
+  max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:9px;color:var(--muted);padding:0 3px;
+}
+.model-status[data-status="ready"]{color:var(--accent2)}
+.model-status[data-status="error"],.model-status[data-status="unreachable"],.model-status[data-status="model-missing"],.model-status[data-status="token-missing"]{color:var(--danger)}
+.model-status[data-status="checking"]{color:var(--warn)}
+
 
 /* Workspace */
 .workspace{display:grid;grid-template-columns:200px minmax(320px,1fr) 340px;min-height:0;flex:1}
