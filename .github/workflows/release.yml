@@ -4,9 +4,15 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
 jobs:
   release:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -16,22 +22,40 @@ jobs:
           - os: ubuntu-latest
             target: AppImage
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-      - name: Install desktop dependencies
+        with: { node-version: "20" }
+      - name: Install dependencies
         working-directory: electron
-        run: npm install
-      - name: Build installer
+        run: npm ci
+      - name: Install browser
+        working-directory: electron
+        run: npx playwright install chromium --with-deps
+      - name: Browser smoke
+        working-directory: electron
+        run: npm run e2e
+      - name: Build signed installer
         working-directory: electron
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.target == 'dmg' && 'true' || 'false' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --${{ matrix.target }} --publish never
-      - name: Upload artifacts
+      - name: Hash release artifacts
+        shell: bash
+        run: |
+          find electron/dist -type f -print0 | sort -z | xargs -0 sha256sum > electron/dist/SHA256SUMS.txt
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: electron/dist/*
+      - name: Upload release
         uses: softprops/action-gh-release@v2
         with:
           files: |
