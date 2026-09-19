@@ -165,6 +165,7 @@ function showModal({ title, bodyHtml, onApply, applyLabel = "Apply" }) {
 }
 
 let githubSaveTimer = null;
+let githubSyncPromise = Promise.resolve();
 let githubSyncConfigured = false;
 
 function setGithubSyncState(label, state = "") {
@@ -222,7 +223,9 @@ async function saveCurrentFileLive() {
 
 function scheduleLiveSave() {
   clearTimeout(githubSaveTimer);
-  githubSaveTimer = setTimeout(saveCurrentFileLive, 900);
+  githubSaveTimer = setTimeout(() => {
+    githubSyncPromise = githubSyncPromise.catch(() => {}).then(saveCurrentFileLive);
+  }, 900);
 }
 
 editor.addEventListener("input", () => {
