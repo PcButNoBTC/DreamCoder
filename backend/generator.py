@@ -11,7 +11,7 @@ import re
 import time
 import zipfile
 from io import BytesIO
-from typing import Any
+from typing import Any\nfrom pathlib import Path
 
 
 def _detect_stack(prompt: str) -> dict[str, str]:
@@ -94,7 +94,7 @@ def generate_project(prompt: str, project_goal: str = "") -> dict[str, Any]:
         "latency_ms": latency,
         "summary": f"Generated {len(files)}-file {lang} project “{name}”",
         "run_hint": _run_hint(stack, name),
-        "self_heal_ready": True,
+        "self_heal_ready": True,\n        "source": "template",
     }
 
 
@@ -591,3 +591,33 @@ def files_to_zip(files: list[dict[str, str]]) -> bytes:
             content = f.get("content") or ""
             z.writestr(path, content)
     return buf.getvalue()
+
+
+FILE_BLOCK_RE = re.compile(r"===FILE:\s*(.+?)===\n(.*?)\n===END===", re.DOTALL)
+GENERATOR_SYSTEM_PROMPT = """You are an app generator. When asked to build an app, respond ONLY with a sequence of file blocks in this exact format:
+===FILE: path/to/file.py===
+<file contents>
+===END===
+Rules:
+- No prose, no markdown fences.
+- Include every file the app needs: entry point, requirements.txt, templates, static assets.
+- The app must run with: pip install -r requirements.txt && python main.py (adjust for the chosen stack).
+- Do not invent dependencies you can't verify.
+"""
+
+async def generate_project_with_model(prompt: str, project_goal: str, router) -> dict[str, Any]:
+    full_prompt=(f"{GENERATOR_SYSTEM_PROMPT}\n\nProject goal: {project_goal or '(none)'}\nUser request:\n{prompt}\n\nOutput all files now.")
+    result=await router.recommend(model_name="",prompt=full_prompt,expected_format="file_blocks")
+    if not result.get("ok"):
+        return {"ok":False,"source":"model","error":result.get("error"),"losers":result.get("losers",[])}
+    files=[]
+    for match in FILE_BLOCK_RE.finditer(result.get("content","")):
+        rel=match.group(1).strip(); body=match.group(2)
+        if rel.startswith("..") or Path(rel).is_absolute(): continue
+        files.append({"path":rel,"content":body})
+    if not files: return {"ok":False,"source":"model","error":"Model produced no valid file blocks"}
+    stack=_detect_stack(prompt); name=_slug(prompt)
+    return {"ok":True,"source":"model","files":files,"name":name,"stack":stack,"file_count":len(files),
+            "summary":f"Model generated {len(files)}-file {stack['language']} project '{name}' via {result.get('winning_lane')}",
+            "run_hint":_run_hint(stack,name),"model":result.get("model"),"winning_lane":result.get("winning_lane"),
+            "latency_ms":result.get("duration_ms",0),"losers":result.get("losers",[])}
