@@ -1432,7 +1432,7 @@ async function ingestFiles(rawList, rootName, replaceExisting = false) {
 async function openNativeWorkspace(root) {
   try {
     const data = await api("/api/workspace", { method: "POST", body: JSON.stringify({ root }) });
-    await api("/api/watch/start", { method: "POST", body: JSON.stringify({ root }) });
+    await api("/api/watch", { method: "POST", body: JSON.stringify({ root }) });
     setStatus("Workspace connected");
     toast("Connected " + data.root, "success");
     await refreshWorkspaceGitStatus();
