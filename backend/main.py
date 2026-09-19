@@ -591,6 +591,10 @@ async def configure_workspace(req: WorkspaceRequest):
         raise HTTPException(400, str(exc)) from exc
     return info
 
+@app.post("/api/workspace/run")
+async def workspace_run(req: GitRequest):
+    command = req.args[0] if req.args else "test"
+    return workspace.run_project_command(command, timeout=120)
 @app.get("/api/workspace/git/status")
 async def workspace_git_status():
     return workspace.git(["status", "--short", "--branch"])
