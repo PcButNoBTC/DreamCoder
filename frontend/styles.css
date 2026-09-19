@@ -387,3 +387,7 @@ body.cursor-fx, body.cursor-fx *{cursor:none !important}
   .analysis-recommendation .rec-actions{display:block}
   .analysis-recommendation .rec-actions button{width:100%;height:30px}
 }
+
+.agent-change{display:flex;flex-direction:column;gap:2px;padding:7px 0;border-top:1px solid var(--border)}
+.agent-change strong{font:9px ui-monospace,monospace;overflow-wrap:anywhere}
+.agent-change span{font-size:9px;color:var(--muted);line-height:1.35}
