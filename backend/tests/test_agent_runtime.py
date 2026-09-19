@@ -62,3 +62,12 @@ def test_openai_compatible_suggestion_parser():
     raw = '[{"title":"Add test","description":"Cover the function","code":"assert True","category":"improvement"}]'
     parsed = OpenAICompatibleModel._parse_suggestions(raw)
     assert parsed[0].title == "Add test"
+
+
+def test_router_uses_explicit_provider_prefixes():
+    from ai_router import AIRouter
+    from models import OllamaModel, HuggingFaceModel, OpenAICompatibleModel
+    router = AIRouter()
+    assert isinstance(router.get_model("ollama:test-model"), OllamaModel)
+    assert isinstance(router.get_model("hf:test/model"), HuggingFaceModel)
+    assert isinstance(router.get_model("openai:test-model"), OpenAICompatibleModel)
