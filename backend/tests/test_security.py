@@ -5,7 +5,7 @@ from security import safe_path,redact,command_capability
 def test_path_and_secret_redaction():
     with tempfile.TemporaryDirectory() as d:
         root=Path(d)
-        assert safe_path(d,"src/main.py").parent == root/"src"
+        assert safe_path(d,"src/main.py").parent == root.resolve()/"src"
         try: safe_path(d,"../escape")
         except PermissionError: pass
         else: assert False
