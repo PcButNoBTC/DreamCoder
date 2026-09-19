@@ -49,7 +49,10 @@ class IndexWatcher:
         self._observer = None
         self._polling = False
         self._stop = False
-        self._seen: dict[str, float] = {}\n        self._pending: dict[str, tuple[str,str]] = {}\n        self._lock = threading.Lock()\n        self._debounce_seconds = float(os.getenv("DREAMCODER_WATCH_DEBOUNCE", "0.35"))
+        self._seen: dict[str, float] = {}
+        self._pending: dict[str, tuple[str,str]] = {}
+        self._lock = threading.Lock()
+        self._debounce_seconds = float(os.getenv("DREAMCODER_WATCH_DEBOUNCE", "0.35"))
 
     def start(self) -> dict:
         if not self.root.exists():
