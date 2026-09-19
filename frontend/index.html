@@ -26,25 +26,7 @@
         <button id="agentBtn" class="btn" title="Run project agent">◆ Agent</button>
         <button id="evolveBtn" class="btn evolve" title="Ask AI to improve the app">✧ Evolve</button>
         <select id="modelSelect" class="select">
-          <optgroup label="Code-specialized">
-            <option value="Qwen2.5-Coder">Qwen2.5-Coder</option>
-            <option value="StarCoder2">StarCoder2</option>
-            <option value="DeepSeek-Coder">DeepSeek-Coder</option>
-            <option value="CodeLlama-34B">CodeLlama-34B</option>
-          </optgroup>
-          <optgroup label="Open / general (less restricted)">
-            <option value="Llama-3.1-8B-Instruct" selected>Llama-3.1-8B-Instruct</option>
-            <option value="Llama-3.1-70B-Instruct">Llama-3.1-70B-Instruct</option>
-            <option value="Mistral-7B-Instruct">Mistral-7B-Instruct</option>
-            <option value="Mixtral-8x7B">Mixtral-8x7B</option>
-            <option value="Yi-34B-Chat">Yi-34B-Chat</option>
-            <option value="Dolphin-Llama3">Dolphin-Llama3 (uncensored)</option>
-            <option value="WizardLM-2">WizardLM-2</option>
-          </optgroup>
-          <optgroup label="Local">
-            <option value="Local Model">Local Model (Ollama / HF)</option>
-            <option value="Ollama">Ollama (any pulled model)</option>
-          </optgroup>
+          <option value="mock">Loading models…</option>
         </select>
         <span id="modelStatus" class="model-status" title="Selected provider status">checking</span>
       </div>
