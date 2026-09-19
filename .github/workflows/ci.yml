@@ -56,3 +56,19 @@ jobs:
         run: npm install --ignore-scripts
       - name: Package smoke test
         run: npm run pack
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install
+        working-directory: electron
+        run: npm install
+      - name: Browser
+        working-directory: electron
+        run: npx playwright install chromium --with-deps
+      - name: E2E smoke
+        working-directory: electron
+        run: npm run e2e
