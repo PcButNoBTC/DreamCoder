@@ -84,19 +84,19 @@ class AIRouter:
                 self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
             elif "/" in name and os.getenv("HF_TOKEN"):
                 self._models[name] = HuggingFaceModel(model_id=name)
-            elif name in {"ollama", "Ollama", "Local Model"} and (
-                os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
-            ):
-                model_id = (
+            else:
+                ollama_base = os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
+                ollama_model = (
                     os.getenv("OLLAMA_MODEL")
                     or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
-                    or "qwen2.5-coder:7b"
+                    or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
+                    or ""
                 )
-                base = os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or os.getenv("OLLAMA_BASE_URL")
-                self._models[name] = OllamaModel(model_id, base_url=base)
-            else:
-                factory = MODEL_REGISTRY.get(name)
-                self._models[name] = factory() if factory is not None else MockModel(name)
+                if ollama_base and (name in {"ollama", "Ollama", "Local Model"} or name == ollama_model or name.endswith(f"/{ollama_model}")):
+                    self._models[name] = OllamaModel(ollama_model or "tinyllama", base_url=ollama_base)
+                else:
+                    factory = MODEL_REGISTRY.get(name)
+                    self._models[name] = factory() if factory is not None else MockModel(name)
         return self._models[name]
 
     async def list_models(self) -> list[dict[str, Any]]:

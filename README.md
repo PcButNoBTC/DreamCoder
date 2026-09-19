@@ -2,6 +2,14 @@
 
 **Your personal AI-native IDE** — code, prompt, stream, evolve, and query every model from one place.
 
+## GitHub Pages preview
+
+The frontend shell is published as a static site on GitHub Pages:
+
+https://pcbutnobtc.github.io/DreamCoder/
+
+> The static site hosts the UI shell. The full project features still require a live backend API, typically on `http://localhost:8000` unless you point `window.DREAMCODER_API` at a remote backend.
+
 ---
 
 ## Quick start (browser)
