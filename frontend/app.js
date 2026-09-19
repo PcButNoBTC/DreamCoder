@@ -2727,7 +2727,8 @@ visionDrop?.addEventListener("drop", (e) => {
   reader.onload = () => setVisionPreview(reader.result);
   reader.readAsDataURL(f);
 });
-document.getElementById("visionAnalyzeBtn")?.addEventListener("click", analyzeVision);\ndocument.getElementById("ollamaValidateBtn")?.addEventListener("click", validateAndLoadOllama);
+document.getElementById("visionAnalyzeBtn")?.addEventListener("click", analyzeVision);
+document.getElementById("ollamaValidateBtn")?.addEventListener("click", validateAndLoadOllama);
 
 // Paste image anywhere in app
 document.addEventListener("paste", (e) => {
@@ -2814,6 +2815,8 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   if (st && (!st.textContent || st.textContent === "Ready")) {
     /* keep */
   }
-  loadAvailableModels().catch(() => {});\n  refreshQuota();\n  setInterval(refreshQuota,30000);
+  loadAvailableModels().catch(() => {});
+  refreshQuota();
+  setInterval(refreshQuota,30000);
   console.log("DreamCoder UI ready");
 })();
