@@ -241,3 +241,34 @@ The **◆ Agent** action now runs the project agent from inside DreamCoder:
 7. Failed validation can be sent back through the selected model for another repair approval.
 
 This keeps the development loop in the IDE instead of requiring an external AI chat window.
+
+## Live GitHub development sync
+
+DreamCoder can mirror IDE edits directly to a GitHub repository. When enabled, stopping edits for about 900ms saves the current file through the backend and commits the latest contents to the configured branch. Agent-generated file changes use the same live sync path.
+
+Configure this on the machine running the DreamCoder backend:
+
+```bash
+# GitHub fine-grained token with Contents: Read and write
+set GITHUB_TOKEN=github_pat_xxx
+
+# Repository and branch to mirror
+set DREAMCODER_GITHUB_REPO=PcButNoBTC/DreamCoder
+set DREAMCODER_GITHUB_BRANCH=main
+set DREAMCODER_GITHUB_AUTOSYNC=true
+```
+
+PowerShell uses `$env:GITHUB_TOKEN="github_pat_xxx"` instead.
+
+The token is **server-side only** and is never sent to the browser. The IDE shows live GitHub status in the bottom status bar:
+- **synced ✓** — the latest editor contents are committed
+- **syncing…** — a commit is in progress
+- **local only** — GitHub autosync is not configured
+- **sync error** — the local save succeeded but GitHub rejected/unavailable
+
+API endpoints:
+- `GET /api/github/status` — configuration/connection state without exposing the token
+- `POST /api/github/sync` — explicitly mirror the indexed project snapshot
+- `POST /api/files/save` — local index save plus GitHub sync by default
+
+This is intentionally a **save-based live sync**, not a commit for every keystroke. It keeps Git history usable while making the IDE's development state continuously progress on the configured GitHub branch.
