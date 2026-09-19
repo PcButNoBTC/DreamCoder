@@ -211,3 +211,9 @@ Agent tools are explicit: `read_file`, `search`, `write_file`, `apply_patch`, `r
 Chat is no longer handled by a hard-coded heuristic responder. Every chat request carries the UI's selected model into the central model router, and the router invokes that model adapter's native conversational interface. Project mode additionally supplies indexed project context and the saved project goal; General mode omits project context.
 
 The chat response reports both the selected model and the backend in the UI. If a model is configured as a mock/offline adapter, DreamCoder labels that explicitly rather than presenting a heuristic answer as real model inference.
+
+### Folder Analysis is project-scoped
+
+Folder Analysis is a separate hoverable/dismissible surface rather than another chat message. Opening a folder replaces the active project index; **Add Files** can still merge files intentionally. Analysis is restricted to the indexed folder and reports its exact scope.
+
+The selected model first identifies the project type and architecture from that folder. It then proposes development improvements specific to that project. A recommendation can ask the selected model to generate a complete file update; DreamCoder shows the diff before the live update is applied. Generic canned cross-project recommendations are not used as model analysis.
