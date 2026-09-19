@@ -264,6 +264,10 @@ function scheduleLiveSave() {
   }, 900);
 }
 
+const RECOVERY_KEY="dreamcoder:editor-recovery";
+function saveEditorRecovery(){try{if(currentPath)localStorage.setItem(RECOVERY_KEY,JSON.stringify({path:currentPath,content:editor.value,at:Date.now()}));}catch(_){}}
+function offerEditorRecovery(){try{const raw=localStorage.getItem(RECOVERY_KEY);if(!raw)return;const d=JSON.parse(raw);if(!d.content||d.content===editor.value)return;showModal({title:"Recover unsaved editor buffer?",bodyHtml:'<p>Recovered '+escapeHtml(d.path||"current file")+' from '+new Date(d.at||Date.now()).toLocaleString()+'.</p><pre class="dc-log">'+escapeHtml(d.content.slice(0,4000))+'</pre>',applyLabel:"Restore",onApply:()=>{if(d.path===currentPath){editor.value=d.content;fileBuffers[currentPath]=d.content;updateLines();syncStatus();setStatus("Recovered unsaved buffer");}}});}catch(_){}}
+setInterval(saveEditorRecovery,1500);
 editor.addEventListener("input", () => {
   updateLines();
   syncStatus();
