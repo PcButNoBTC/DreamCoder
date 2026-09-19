@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from .runtime import AgentRuntime
 from .types import AgentRequest
+import workspace
 
 router=APIRouter(prefix="/api/agent",tags=["agent"])
 runtime=AgentRuntime()
@@ -23,8 +24,13 @@ class ApprovalBody(BaseModel):
 
 @router.post("/run")
 async def run_agent(body:RunBody):
-    workspace = Path(body.cwd).expanduser() if body.cwd else Path(__file__).resolve().parents[2]
-    cwd=str(workspace.resolve())
+    configured = workspace.root()
+    requested = Path(body.cwd).expanduser() if body.cwd and body.cwd != "." else (configured or Path(__file__).resolve().parents[2])
+    cwd=str(requested.resolve())
+    if configured is not None:
+        base=configured.resolve()
+        if Path(cwd) != base and base not in Path(cwd).parents:
+            raise HTTPException(400,"Agent workspace must stay inside the active workspace")
     if not Path(cwd).exists(): raise HTTPException(400,f"Workspace does not exist: {cwd}")
     run=await runtime.run(AgentRequest(**body.model_dump(),cwd=cwd))
     return run.to_dict()
