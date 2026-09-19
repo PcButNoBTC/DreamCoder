@@ -80,7 +80,7 @@ class OllamaModel(BaseModel):
             "You are the selected DreamCoder coding assistant. Answer the user's request directly. "
             "Do not claim to have changed files or run commands unless the tool system actually did so."
         )
-        if context.mode == "project":
+        if context.project_context:
             system += "\\n\\nProject context:\\n" + (context.project_context or "(no project context available)")
             if context.project_goal:
                 system += "\\nProject goal: " + context.project_goal
