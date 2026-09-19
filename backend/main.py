@@ -896,6 +896,29 @@ async def workspace_git(req: GitRequest):
     if not req.args or req.args[0] not in allowed:
         raise HTTPException(400, "Unsupported Git operation")
     return workspace.git(req.args, timeout=120)
+
+@app.get("/api/github/oauth/start")
+async def github_oauth_start():
+    if not github_auth.configured(): raise HTTPException(400,"GitHub OAuth is not configured. Set DREAMCODER_GITHUB_CLIENT_ID, DREAMCODER_GITHUB_CLIENT_SECRET and DREAMCODER_OAUTH_STATE_SECRET.")
+    return {"ok":True,"url":github_auth.start_url()}
+@app.get("/api/github/oauth/callback")
+async def github_oauth_callback(code:str="",state:str="",error:str=""):
+    from fastapi.responses import HTMLResponse
+    if error:return HTMLResponse("<script>window.close()</script><p>GitHub authorization cancelled.</p>",status_code=400)
+    if not github_auth.verify_state(state): return HTMLResponse("<p>Invalid or expired OAuth state.</p>",status_code=400)
+    try: data=await github_auth.exchange(code)
+    except Exception as exc:return HTMLResponse(f"<p>GitHub connection failed: {escape_html(str(exc))}</p>",status_code=400)
+    return HTMLResponse("<script>window.opener&&window.opener.postMessage({type:'dreamcoder-github-connected'},'*');window.close()</script><p>DreamCoder is connected to GitHub. You can close this window.</p>")
+@app.get("/api/github/oauth/status")
+async def github_oauth_status(): return await github_auth.user()
+@app.get("/api/github/oauth/installations")
+async def github_oauth_installations(): return await github_auth.installations()
+@app.get("/api/github/oauth/repositories")
+async def github_oauth_repositories(installation_id:int|None=None): return await github_auth.repositories(installation_id)
+@app.post("/api/github/oauth/refresh-token")
+async def github_oauth_refresh_token(): return await github_auth.refresh()
+@app.post("/api/github/oauth/disconnect")
+async def github_oauth_disconnect(): return github_auth.disconnect()
 @app.get("/api/github/remote")
 async def github_remote():
     return await github_sync.remote_head()
