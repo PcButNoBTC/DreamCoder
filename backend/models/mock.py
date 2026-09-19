@@ -43,7 +43,7 @@ class MockModel(BaseModel):
         start = time.perf_counter()
         msg = (context.message or "").strip()
         mode = (context.mode or "project").lower()
-        if mode == "project" and context.project_context:
+        if context.project_context:
             content = (
                 f"{self.display_name} (mock backend) received your project request.\\n\\n"
                 f"Request: {msg}\\n\\n"
