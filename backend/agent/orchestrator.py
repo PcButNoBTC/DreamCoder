@@ -1,9 +1,10 @@
 """Autonomous implementation loop: plan -> checkpoint -> implement -> build/test -> repair -> verify."""
 from __future__ import annotations
-import asyncio, json, subprocess, time
+import asyncio, json, subprocess, time, os
 from pathlib import Path
 from typing import Any
 import db, workspace
+from sandbox import run as sandbox_run
 from checkpoints import create, restore
 from security import audit, redact
 class AgentOrchestrator:
@@ -19,7 +20,7 @@ class AgentOrchestrator:
         while repairs<max_repairs:
             if run.status=="completed" and run.validation.get("ok",False): break
             if not command: break
-            result=workspace.run_shell(command,timeout=max(30,req.timeout*3))
+            result=sandbox_run(req.cwd,command,timeout=max(30,req.timeout*3),network=os.getenv("DREAMCODER_AGENT_NETWORK","0")=="1")
             run.validation=result
             history.append({"phase":"verify","result":result})
             if result.get("ok"): run.status="completed"; break
