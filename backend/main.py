@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 import db
 from ai_router import AIRouter, MODEL_REGISTRY
-from models.base import CodeContext
+from models.base import ChatContext, CodeContext
 from watcher import IndexWatcher
 from analyzer import analyze_folder, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
@@ -634,41 +634,41 @@ async def set_project_context(req: ProjectContextRequest):
 
 @app.post("/api/ai/chat")
 async def ai_chat(req: ChatRequest):
-    goal = db.get_setting("project_goal", "") or ""
-    result = chat_reply(req.message, router.index, project_goal=goal, mode=req.mode)
-    # Tag with selected model and enrich via model adapter when useful
+    """Chat always goes through the model selected in the UI."""
     model_name = req.model or "Llama-3.1-8B-Instruct"
-    result["model"] = model_name
+    mode = (req.mode or "project").lower()
+    goal = db.get_setting("project_goal", "") or ""
+    history_rows = db.recent_history(20)
+    history = [
+        {"role": "user", "content": row.get("prompt", "")}
+        if row.get("kind") == "chat" else
+        {"role": "assistant", "content": row.get("response", "")}
+        for row in reversed(history_rows)
+        if row.get("kind") == "chat"
+    ][-8:]
     try:
-        # Run selected model for extra suggestions on project-mode coding questions
-        if req.mode != "general" and any(
-            k in (req.message or "").lower()
-            for k in ("improve", "fix", "refactor", "suggest", "how can", "cnc", "code")
-        ):
-            files = router.index.list_files()
-            sample = ""
-            for f in files[:5]:
-                full = router.index.get_file(f["path"]) or {}
-                sample += f"\n# --- {f['path']} ---\n{(full.get('content') or '')[:800]}\n"
-            ctx = CodeContext(
-                code=sample or req.message,
-                language="python",
-                filename="project",
-            )
-            inf = await router.suggest(model_name, ctx, use_cache=True)
-            extra = "\n\n---\n**From selected model (`{0}`):**\n".format(inf.model)
-            for s in inf.suggestions[:4]:
-                extra += f"- **{s.title}**: {s.description}\n"
-            result["content"] = (result.get("content") or "") + extra
-            result["latency_ms"] = (result.get("latency_ms") or 0) + inf.latency_ms
-            result["model_suggestions"] = [
-                {"title": s.title, "description": s.description, "code": s.code, "id": s.id}
-                for s in inf.suggestions[:4]
-            ]
+        result = await router.chat(
+            model_name,
+            ChatContext(
+                message=req.message,
+                mode=mode,
+                project_goal=goal if mode == "project" else "",
+                history=history,
+            ),
+            use_cache=False,
+        )
+        payload = {
+            "role": "assistant",
+            "content": result.content,
+            "kind": mode,
+            "model": result.model,
+            "backend": result.backend,
+            "latency_ms": result.latency_ms,
+        }
+        db.add_history("chat", result.model, req.message[:500], result.content[:2000], result.latency_ms)
+        return payload
     except Exception as exc:
-        result["model_error"] = str(exc)
-    db.add_history("chat", model_name, req.message[:500], result["content"][:1000], result.get("latency_ms", 0))
-    return result
+        raise HTTPException(502, f"Selected model '{model_name}' failed: {exc}") from exc
 
 
 @app.get("/api/ai/monitor")
