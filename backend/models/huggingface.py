@@ -71,7 +71,7 @@ class HuggingFaceModel(BaseModel):
                     headers=headers,
                     json=payload,
                 )
-                _record_quota(dict(resp.headers), resp.status_code)\n                _record_quota(dict(resp.headers), resp.status_code)\n                resp.raise_for_status()
+                _record_quota(dict(resp.headers), resp.status_code)\n                resp.raise_for_status()
                 data = resp.json()
                 raw = data[0]["generated_text"] if isinstance(data, list) else str(data)
         except Exception as exc:
@@ -112,6 +112,8 @@ class HuggingFaceModel(BaseModel):
     async def chat(self, context: ChatContext) -> ChatResult:
         start = time.perf_counter()
         prompt = self._build_chat_prompt(context)
+        if context.mode == "analysis" or "Return ONLY" in prompt:
+            prompt += "\n\nRespond with raw JSON only. No prose, no markdown fences."
         if not self.api_token:
             return ChatResult(content=f"Selected model HuggingFace/{self.model_id} has no HF_TOKEN configured.", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
         try:
@@ -122,6 +124,7 @@ class HuggingFaceModel(BaseModel):
                     headers={"Authorization": f"Bearer {self.api_token}"},
                     json={"inputs": prompt, "parameters": {"max_new_tokens": 1200, "temperature": 0.3, "return_full_text": False}},
                 )
+                _record_quota(dict(resp.headers), resp.status_code)
                 resp.raise_for_status()
                 data = resp.json()
                 raw = data[0].get("generated_text", "") if isinstance(data, list) else str(data)
