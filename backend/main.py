@@ -81,6 +81,8 @@ if __name__ == "__main__":
 
 _watcher: Optional[IndexWatcher] = None
 _watch_task = None
+_sync_pending: dict[str, dict[str,str]] = {}
+_sync_task = None
 
 # ---------------------------------------------------------------------------
 # Models
@@ -784,23 +786,31 @@ async def start_watch(req: WatchRequest):
 
     syncing_ready = False
 
+    async def flush_external_sync():
+        global _sync_task
+        await asyncio.sleep(0.45)
+        if not _sync_pending: return
+        batch = list(_sync_pending.values())
+        _sync_pending.clear()
+        result = await github_sync.sync_files_atomic(batch, message="DreamCoder external workspace changes")
+        db.add_history("github-sync", "github", "watcher", json.dumps(result)[:2000], 0)
+        _sync_task = None
+
     def on_change(rel: str, content: str, language: str):
+        global _sync_task
         if language == "deleted" or content == "":
             router.index.remove_file(rel)
-            try:
-                loop = asyncio.get_running_loop()
-                if syncing_ready:
-                    loop.create_task(github_sync.delete_file(rel))
-            except RuntimeError:
-                pass
+            if syncing_ready:
+                _sync_pending[rel] = {"path": rel, "deleted": "1"}
         else:
             router.index.index_file(rel, content, language)
+            if syncing_ready:
+                _sync_pending[rel] = {"path": rel, "content": content}
+        if syncing_ready and _sync_task is None:
             try:
-                loop = asyncio.get_running_loop()
-                if syncing_ready:
-                    loop.create_task(github_sync.sync_file(rel, content, message=f"DreamCoder external change: {rel}"))
+                _sync_task = asyncio.get_running_loop().create_task(flush_external_sync())
             except RuntimeError:
-                pass
+                _sync_task = None
 
     _watcher = IndexWatcher(root, on_change)
     info = _watcher.start()
