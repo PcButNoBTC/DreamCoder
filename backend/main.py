@@ -26,6 +26,7 @@ from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, m
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, generate_project_with_model, self_heal, files_to_zip
 from github_sync import github_sync
+from quota_tracker import snapshot as quota_snapshot
 import workspace
 from agent.api import router as agent_router
 from production import readiness, diagnostics, init as production_init
