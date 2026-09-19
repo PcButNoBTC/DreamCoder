@@ -64,8 +64,8 @@ class AgentRuntime:
     @staticmethod
     def _extract_json(text: str) -> Any:
         cleaned=(text or "").strip()
-        if cleaned.startswith("``````"):
-            cleaned=cleaned.split("\n",1)[-1].rsplit("``````",1)[0].strip()
+        if cleaned.startswith("```"):
+            cleaned=cleaned.split("\n",1)[-1].rsplit("```",1)[0].strip()
         try:
             return json.loads(cleaned)
         except Exception:
