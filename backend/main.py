@@ -717,6 +717,14 @@ async def workspace_git(req: GitRequest):
     if not req.args or req.args[0] not in allowed:
         raise HTTPException(400, "Unsupported Git operation")
     return workspace.git(req.args, timeout=120)
+@app.get("/api/github/remote")
+async def github_remote():
+    return await github_sync.remote_head()
+
+@app.get("/api/ai/providers/status")
+async def ai_provider_status():
+    return router.provider_status()
+
 @app.get("/api/github/status")
 async def github_status():
     return github_sync.status()
