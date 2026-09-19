@@ -34,7 +34,7 @@ async def user():
         r=await c.get("https://api.github.com/user",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"}); r.raise_for_status(); d=r.json()
     return {"ok":True,"connected":True,"login":d.get("login"),"avatar":d.get("avatar_url"),"token_expires_at":db.get_setting("github_oauth_expires_at","")}
 async def installations():
-    token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    token=(get_secret("github_oauth_token") if available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
     if not token:return {"ok":False,"installations":[]}
     async with httpx.AsyncClient(timeout=20) as c:
         r=await c.get("https://api.github.com/user/installations",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}); r.raise_for_status(); d=r.json()
