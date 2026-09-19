@@ -14,7 +14,7 @@ import os
 import time
 from typing import Any, Optional
 
-from .base import BaseModel, CodeContext, InferenceResult, Suggestion
+from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
 
 
 class HuggingFaceModel(BaseModel):
@@ -38,12 +38,13 @@ class HuggingFaceModel(BaseModel):
         if self.use_api and self.api_token:
             return await self._via_api(context, start)
         else:
-            # Fall back to mock so the UI never breaks
-            from .mock import MockModel
-            fallback = MockModel(display_name=f"HF({self.model_id}) [mock]")
-            result = await fallback.complete(context)
-            result.model = f"HuggingFace/{self.model_id} (mock – set HF_TOKEN for real API)"
-            return result
+            return InferenceResult(
+                suggestions=[],
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                model=f"HuggingFace/{self.model_id}",
+                cached=False,
+                health={"status": "token-missing", "backend": "huggingface", "model_id": self.model_id},
+            )
 
     async def _via_api(self, context: CodeContext, start: float) -> InferenceResult:
         import httpx
@@ -70,11 +71,13 @@ class HuggingFaceModel(BaseModel):
                 data = resp.json()
                 raw = data[0]["generated_text"] if isinstance(data, list) else str(data)
         except Exception as exc:
-            from .mock import MockModel
-            fallback = MockModel(display_name=f"HF({self.model_id})")
-            result = await fallback.complete(context)
-            result.model = f"HuggingFace/{self.model_id} – API error, mock used"
-            return result
+            return InferenceResult(
+                suggestions=[],
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                model=f"HuggingFace/{self.model_id}",
+                cached=False,
+                health={"status": "error", "backend": "huggingface-api", "model_id": self.model_id, "error": str(exc)},
+            )
 
         suggestions = [
             Suggestion(
@@ -101,6 +104,33 @@ class HuggingFaceModel(BaseModel):
             ],
             health={"score": 88, "backend": "huggingface-api"},
         )
+
+    async def chat(self, context: ChatContext) -> ChatResult:
+        start = time.perf_counter()
+        prompt = self._build_chat_prompt(context)
+        if not self.api_token:
+            return ChatResult(content=f"Selected model HuggingFace/{self.model_id} has no HF_TOKEN configured.", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                resp = await client.post(
+                    f"https://api-inference.huggingface.co/models/{self.model_id}",
+                    headers={"Authorization": f"Bearer {self.api_token}"},
+                    json={"inputs": prompt, "parameters": {"max_new_tokens": 1200, "temperature": 0.3, "return_full_text": False}},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                raw = data[0].get("generated_text", "") if isinstance(data, list) else str(data)
+                return ChatResult(content=raw.strip() or "(empty model response)", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
+        except Exception as exc:
+            return ChatResult(content=f"Selected model HuggingFace/{self.model_id} is unavailable: {exc}", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
+
+    def _build_chat_prompt(self, context: ChatContext) -> str:
+        project = ""
+        if context.project_context:
+            project = f"\\nProject goal: {context.project_goal}\\nProject context:\\n{context.project_context}\\n"
+        history = "\\n".join(f"{m.get('role','user')}: {m.get('content','')}" for m in context.history[-8:])
+        return f"You are the selected DreamCoder assistant. Answer directly and honestly. Do not claim actions you did not perform.{project}\\nConversation:\\n{history}\\nuser: {context.message}\\nassistant:"
 
     async def health_check(self) -> dict[str, Any]:
         return {
