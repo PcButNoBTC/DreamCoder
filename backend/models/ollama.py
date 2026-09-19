@@ -8,6 +8,7 @@ Then set DREAMCODER_MODEL=ollama:qwen2.5-coder:7b
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any, Optional
 
@@ -27,7 +28,7 @@ class OllamaModel(BaseModel):
         timeout: float = 60.0,
     ):
         self.model_name = model_name
-        self.base_url = base_url.rstrip("/")
+        self.base_url = (os.getenv("OLLAMA_BASE_URL") or base_url).rstrip("/")
         self.timeout = timeout
 
     async def complete(self, context: CodeContext) -> InferenceResult:
