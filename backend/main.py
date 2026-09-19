@@ -607,9 +607,6 @@ async def workspace_git_log(limit: int = 20):
 async def workspace_git_diff(staged: bool = False):
     return workspace.git(["diff", "--cached" if staged else "--"])
 
-class GitRequest(BaseModel):
-    args: list[str] = Field(default_factory=list)
-
 @app.post("/api/workspace/git")
 async def workspace_git(req: GitRequest):
     allowed = {"status", "diff", "log", "branch", "switch", "add", "commit", "fetch", "pull", "push"}
