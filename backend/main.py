@@ -619,7 +619,7 @@ async def api_save_file(req: SaveFileRequest):
             workspace_write = {"ok": False, "error": str(exc)}
     sync = {"ok": False, "skipped": True, "reason": "disabled"}
     if req.sync_github:
-        sync = await github_sync.sync_file(req.path, req.content, req.commit_message or None)
+        sync = await github_sync.sync_file_with_backup(str(workspace.root() or ""), req.path, req.content, req.commit_message or None)
     return {"ok": True, "stats": stats, "workspace": workspace_write, "github": sync}
 
 @app.get("/api/workspace")
