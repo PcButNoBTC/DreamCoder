@@ -202,7 +202,7 @@ async def health(model: Optional[str] = None):
 
 @app.get("/api/models")
 async def list_models():
-    return {"models": list(MODEL_REGISTRY.keys())}
+    return {"models": await router.list_models()}
 
 
 @app.post("/api/ai/suggest")
