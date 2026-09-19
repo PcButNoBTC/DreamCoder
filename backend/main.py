@@ -23,6 +23,7 @@ from watcher import IndexWatcher
 from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, self_heal, files_to_zip
+from github_sync import github_sync
 from agent.api import router as agent_router
 
 # ---------------------------------------------------------------------------
@@ -125,6 +126,8 @@ class SaveFileRequest(BaseModel):
     path: str
     content: str
     language: str = "python"
+    sync_github: bool = True
+    commit_message: str = ""
 
 
 class ChatRequest(BaseModel):
@@ -558,7 +561,23 @@ async def bulk_index(req: BulkIndexRequest):
 @app.post("/api/files/save")
 async def api_save_file(req: SaveFileRequest):
     stats = router.index.index_file(req.path, req.content, req.language)
-    return {"ok": True, "stats": stats}
+    sync = {"ok": False, "skipped": True, "reason": "disabled"}
+    if req.sync_github:
+        sync = await github_sync.sync_file(req.path, req.content, req.commit_message or None)
+    return {"ok": True, "stats": stats, "github": sync}
+
+@app.get("/api/github/status")
+async def github_status():
+    return github_sync.status()
+
+@app.post("/api/github/sync")
+async def github_sync_current():
+    files = []
+    for item in router.index.list_files():
+        row = db.get_file(item["path"])
+        if row:
+            files.append({"path": item["path"], "content": row["content"]})
+    return await github_sync.sync_files(files, message="DreamCoder project snapshot")
 
 
 @app.get("/api/index/stats")
