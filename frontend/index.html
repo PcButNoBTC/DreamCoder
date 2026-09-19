@@ -191,7 +191,7 @@ Type a command and press Enter (runs on the machine hosting the backend).
         <!-- Generate full projects -->
         <section class="card" id="generateCard" data-ai-panel="panel-generate">
           <div class="card-head"><span>✦ Generate Project</span><span class="badge">ANY LANGUAGE</span></div>
-          <div class="muted" style="margin-bottom:6px">Describe an app — AI scaffolds all files (Python, C/C++, TS, C#, Rust…). Then load or download zip.</div>
+          <div class="muted" style="margin-bottom:6px">Describe an app — AI implements the requested behavior, writes the project into the connected workspace, and runs a real build/validation step.</div>
           <textarea id="generatePrompt" class="evolve-input" rows="3" placeholder="e.g. C++ desktop app with forms like Visual Studio that tracks tasks&#10;e.g. Python FastAPI todo API with tests&#10;e.g. Recreate this IDE as a downloadable zip"></textarea>
           <div class="patch-actions" style="margin-top:6px">
             <button class="apply" id="generateGoBtn" style="flex:1">Generate</button>
@@ -200,7 +200,7 @@ Type a command and press Enter (runs on the machine hosting the backend).
           <div id="generatePages" class="muted" style="margin-top:8px"></div>
           <div id="generateFiles" class="hf-list" style="margin-top:6px"></div>
           <div class="patch-actions" style="margin-top:6px;display:none" id="generateApplyRow">
-            <button class="apply" id="generateApplyBtn" style="flex:1">Load into workspace</button>
+            <button class="apply" id="generateApplyBtn" style="flex:1">Build & load into workspace</button>
           </div>
         </section>
 
