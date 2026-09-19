@@ -27,6 +27,12 @@ class GitHubSync:
         r=await client.get(u,headers=self._headers())
         if r.status_code!=200: return {"ok":False,"status_code":r.status_code,"error":r.text[:1000]}
         return {"ok":True,"sha":r.json()["object"]["sha"]}
+    async def remote_head(self):
+        if not self.configured: return {"ok":False,"reason":"not configured"}
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                return await self._get_ref(client)
+        except Exception as e: return {"ok":False,"error":str(e)}
     async def test_connection(self):
         if not self.configured:return {"ok":False,"reason":"not configured"}
         try:
