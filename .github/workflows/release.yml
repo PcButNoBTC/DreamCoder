@@ -1,0 +1,39 @@
+name: DreamCoder Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: nsis
+          - os: macos-latest
+            target: dmg
+          - os: ubuntu-latest
+            target: AppImage
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install desktop dependencies
+        working-directory: electron
+        run: npm install
+      - name: Build installer
+        working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --${{ matrix.target }} --publish never
+      - name: Upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            electron/dist/**
+          generate_release_notes: true
