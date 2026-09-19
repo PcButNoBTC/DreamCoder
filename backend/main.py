@@ -122,7 +122,14 @@ class EvolveRequest(BaseModel):
 class WatchRequest(BaseModel):
     root: str
 
-class OllamaHostRequest(BaseModel):\n    url: str\n\nclass OllamaPrimaryRequest(BaseModel):\n    url: str\n    model: str\n\nclass WorkspaceRequest(BaseModel):
+class OllamaHostRequest(BaseModel):
+    url: str
+
+class OllamaPrimaryRequest(BaseModel):
+    url: str
+    model: str
+
+class WorkspaceRequest(BaseModel):
     root: str
 
 class GitRequest(BaseModel):
@@ -253,7 +260,8 @@ async def model_race_test(body:dict={}):
     if not lanes: raise HTTPException(400,"No lanes configured")
     result=await race(lanes,ChatContext(message=prompt,mode="general"),expected_format=None,min_responses=1)
     return {"winner":result.winner.lane.name if result.winner else None,"winner_model":result.winner.lane.model if result.winner else None,"winner_content":result.winner.content if result.winner else None,"losers":[{"lane":l.lane.name,"reason":l.reason,"latency_ms":l.latency_ms} for l in result.losers],"duration_ms":result.duration_ms,"race_id":result.race_id}
-\n@app.get("/api/models")
+
+@app.get("/api/models")
 async def list_models():
     return {"models": await router.list_models()}
 
