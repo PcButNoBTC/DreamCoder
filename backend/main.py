@@ -5,6 +5,7 @@ DreamCoder API – full personal IDE backend
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import os
 import time
@@ -17,9 +18,9 @@ from pydantic import BaseModel, Field
 
 import db
 from ai_router import AIRouter, MODEL_REGISTRY
-from models.base import CodeContext
+from models.base import ChatContext, CodeContext
 from watcher import IndexWatcher
-from analyzer import analyze_folder, monitor_insights, chat_reply
+from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, self_heal, files_to_zip
 from agent.api import router as agent_router
@@ -132,6 +133,15 @@ class ChatRequest(BaseModel):
     mode: str = "project"  # project | general
 
 
+class FolderAnalysisRequest(BaseModel):
+    model: str = "Llama-3.1-8B-Instruct"
+
+class AnalysisActionRequest(BaseModel):
+    model: str = "Llama-3.1-8B-Instruct"
+    path: str
+    instruction: str
+    project_type: str = ""
+
 class ProjectContextRequest(BaseModel):
     goal: str = ""
     description: str = ""
@@ -192,7 +202,7 @@ async def health(model: Optional[str] = None):
 
 @app.get("/api/models")
 async def list_models():
-    return {"models": list(MODEL_REGISTRY.keys())}
+    return {"models": await router.list_models()}
 
 
 @app.post("/api/ai/suggest")
@@ -520,11 +530,14 @@ class BulkFile(BaseModel):
 class BulkIndexRequest(BaseModel):
     files: list[BulkFile]
     root_name: str = "dropped-project"
+    replace_existing: bool = False
 
 
 @app.post("/api/files/bulk")
 async def bulk_index(req: BulkIndexRequest):
-    """Index many files at once (drag-drop folder)."""
+    """Index files; folder opens replace the active index, while Add Files can merge."""
+    if req.replace_existing:
+        router.index.clear()
     count = 0
     for f in req.files:
         lang = f.language or "python"
@@ -634,41 +647,41 @@ async def set_project_context(req: ProjectContextRequest):
 
 @app.post("/api/ai/chat")
 async def ai_chat(req: ChatRequest):
-    goal = db.get_setting("project_goal", "") or ""
-    result = chat_reply(req.message, router.index, project_goal=goal, mode=req.mode)
-    # Tag with selected model and enrich via model adapter when useful
+    """Chat always goes through the model selected in the UI."""
     model_name = req.model or "Llama-3.1-8B-Instruct"
-    result["model"] = model_name
+    mode = (req.mode or "project").lower()
+    goal = db.get_setting("project_goal", "") or ""
+    history_rows = db.recent_history(20)
+    history = [
+        {"role": "user", "content": row.get("prompt", "")}
+        if row.get("kind") == "chat" else
+        {"role": "assistant", "content": row.get("response", "")}
+        for row in reversed(history_rows)
+        if row.get("kind") == "chat"
+    ][-8:]
     try:
-        # Run selected model for extra suggestions on project-mode coding questions
-        if req.mode != "general" and any(
-            k in (req.message or "").lower()
-            for k in ("improve", "fix", "refactor", "suggest", "how can", "cnc", "code")
-        ):
-            files = router.index.list_files()
-            sample = ""
-            for f in files[:5]:
-                full = router.index.get_file(f["path"]) or {}
-                sample += f"\n# --- {f['path']} ---\n{(full.get('content') or '')[:800]}\n"
-            ctx = CodeContext(
-                code=sample or req.message,
-                language="python",
-                filename="project",
-            )
-            inf = await router.suggest(model_name, ctx, use_cache=True)
-            extra = "\n\n---\n**From selected model (`{0}`):**\n".format(inf.model)
-            for s in inf.suggestions[:4]:
-                extra += f"- **{s.title}**: {s.description}\n"
-            result["content"] = (result.get("content") or "") + extra
-            result["latency_ms"] = (result.get("latency_ms") or 0) + inf.latency_ms
-            result["model_suggestions"] = [
-                {"title": s.title, "description": s.description, "code": s.code, "id": s.id}
-                for s in inf.suggestions[:4]
-            ]
+        result = await router.chat(
+            model_name,
+            ChatContext(
+                message=req.message,
+                mode=mode,
+                project_goal=goal if mode == "project" else "",
+                history=history,
+            ),
+            use_cache=False,
+        )
+        payload = {
+            "role": "assistant",
+            "content": result.content,
+            "kind": mode,
+            "model": result.model,
+            "backend": result.backend,
+            "latency_ms": result.latency_ms,
+        }
+        db.add_history("chat", result.model, req.message[:500], result.content[:2000], result.latency_ms)
+        return payload
     except Exception as exc:
-        result["model_error"] = str(exc)
-    db.add_history("chat", model_name, req.message[:500], result["content"][:1000], result.get("latency_ms", 0))
-    return result
+        raise HTTPException(502, f"Selected model '{model_name}' failed: {exc}") from exc
 
 
 @app.get("/api/ai/monitor")
@@ -683,17 +696,60 @@ async def ai_monitor():
 # ---------- Folder analysis ----------
 
 @app.post("/api/ai/analyze-folder")
-async def api_analyze_folder():
+async def api_analyze_folder(req: FolderAnalysisRequest):
     goal = db.get_setting("project_goal", "") or ""
-    result = analyze_folder(router.index, project_goal=goal)
+    result = await analyze_folder_with_model(
+        router.index, model_name=req.model, project_goal=goal, router=router
+    )
     db.add_history(
         "analyze",
-        "analyzer",
+        result.get("model_analysis", {}).get("model", req.model),
         goal or "(no goal)",
         result.get("summary", ""),
         result.get("latency_ms", 0),
     )
     return result
+
+
+@app.post("/api/ai/analyze-action")
+async def api_analyze_action(req: AnalysisActionRequest):
+    """Generate a model-authored update for one indexed file, without applying it."""
+    indexed = {f["path"] for f in router.index.list_files()}
+    if req.path not in indexed:
+        raise HTTPException(400, "Analysis actions may only target files in the indexed folder")
+
+    full = router.index.get_file(req.path) or {}
+    current = full.get("content") or ""
+    language = full.get("language") or "text"
+    prompt = (
+        "You are implementing a safe improvement to the project file below.\n"
+        f"Project type: {req.project_type or \"unknown\"}\n"
+        f"Instruction: {req.instruction}\n\n"
+        "Return ONLY valid JSON: {\"path\":\"...\",\"content\":\"complete replacement file content\",\"summary\":\"short explanation\"}\n"
+        "Rules: modify ONLY this file; preserve behavior unless instructed; do not invent dependencies; return the COMPLETE file; no markdown fences.\n\n"
+        f"FILE ({language}):\n{current}"
+    )
+
+    from models.base import ChatContext
+    result = await router.chat(
+        req.model, ChatContext(message=prompt, mode="analysis", project_context=current), use_cache=False
+    )
+    parsed = _extract_json(result.content)
+    if not parsed or "content" not in parsed:
+        raise HTTPException(502, f"Selected model did not return a structured update: {result.content[:600]}")
+    proposed = str(parsed["content"])
+    diff = "".join(difflib.unified_diff(
+        current.splitlines(True), proposed.splitlines(True),
+        fromfile=req.path, tofile=req.path,
+    ))
+    return {
+        "path": req.path,
+        "content": proposed,
+        "summary": str(parsed.get("summary") or "Model-proposed update"),
+        "diff": diff,
+        "model": result.model,
+        "backend": result.backend,
+    }
 
 
 

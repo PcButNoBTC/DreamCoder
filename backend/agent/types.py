@@ -37,6 +37,7 @@ class AgentRun:
     status: str
     goal: str
     cwd: str
+    model: str = ""
     plan: list[PlanStep] = field(default_factory=list)
     tool_calls: list[ToolCall] = field(default_factory=list)
     changes: list[dict[str, Any]] = field(default_factory=list)

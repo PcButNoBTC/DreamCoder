@@ -22,6 +22,9 @@ class ProjectIndex:
     def __init__(self):
         db.init_db()
 
+    def clear(self) -> None:
+        db.clear_files()
+
     def index_file(self, path: str, content: str, language: str = "python") -> dict[str, Any]:
         # upsert_file clears the previous symbol snapshot before parsing the new content.
         db.upsert_file(path, content, language)

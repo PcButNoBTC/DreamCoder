@@ -28,6 +28,82 @@ function syncStatus() {
 }
 
 function setStatus(text) { statusEl.textContent = text; }
+
+async function refreshModelHealth() {
+  const selected = modelSelect?.value;
+  const badge = document.getElementById("modelStatus");
+  if (!selected) return;
+  if (badge) {
+    badge.textContent = "checking";
+    badge.dataset.status = "checking";
+  }
+  try {
+    const data = await api("/api/health?model=" + encodeURIComponent(selected));
+    const m = data.model || {};
+    const status = m.status || "unknown";
+    const backend = m.backend || (selected === "mock" ? "mock" : "");
+    const label = status === "ready" ? "online" : status.replace(/-/g, " ");
+    if (badge) {
+      badge.textContent = label + (backend ? " · " + backend : "");
+      badge.dataset.status = status;
+      badge.title = JSON.stringify(m);
+    }
+    if (modelCurrent) modelCurrent.textContent = selected;
+  } catch (err) {
+    if (badge) {
+      badge.textContent = "unavailable";
+      badge.dataset.status = "error";
+      badge.title = err.message;
+    }
+  }
+}
+
+async function loadAvailableModels() {
+  if (!modelSelect) return;
+  try {
+    const data = await api("/api/models");
+    const models = Array.isArray(data.models) ? data.models : [];
+    const previous = localStorage.getItem("dc_model");
+    modelSelect.innerHTML = "";
+    const groups = new Map();
+    for (const model of models) {
+      const provider = model.provider || "other";
+      if (!groups.has(provider)) {
+        const group = document.createElement("optgroup");
+        group.label = provider === "mock" ? "Offline / development" : provider;
+        groups.set(provider, group);
+        modelSelect.appendChild(group);
+      }
+      const option = document.createElement("option");
+      option.value = model.id;
+      option.textContent = model.name + (model.real ? "" : " (mock)");
+      option.dataset.status = model.status || "unknown";
+      option.dataset.real = model.real ? "true" : "false";
+      groups.get(provider).appendChild(option);
+    }
+    if (!models.length) {
+      const option = document.createElement("option");
+      option.value = "mock";
+      option.textContent = "Mock / offline";
+      modelSelect.appendChild(option);
+    }
+    const validPrevious = [...modelSelect.options].some((o) => o.value === previous);
+    const firstReal = [...modelSelect.options].find((o) => o.dataset.real === "true");
+    modelSelect.value = validPrevious ? previous : (firstReal?.value || "mock");
+    modelCurrent.textContent = modelSelect.value;
+    localStorage.setItem("dc_model", modelSelect.value);
+    await refreshModelHealth();
+  } catch (err) {
+    // Never leave pretend model names selected when discovery is unavailable.
+    modelSelect.innerHTML = '<option value="mock">Mock / offline</option>';
+    modelSelect.value = "mock";
+    modelCurrent.textContent = "mock";
+    localStorage.setItem("dc_model", "mock");
+    await refreshModelHealth();
+    toast("Model discovery unavailable — using explicit Mock / offline mode", "info", 4500);
+  }
+}
+
 function setTerminal(text) {
   terminal.textContent = text;
   terminal.scrollTop = terminal.scrollHeight;
@@ -117,6 +193,60 @@ async function runCode() {
   }
 }
 document.getElementById("runBtn").onclick = runCode;
+document.getElementById("agentBtn")?.addEventListener("click", runProjectAgent);
+async function runProjectAgent() {
+  const goal = prompt("What should DreamCoder change in this project?", document.getElementById("projectGoal")?.value || "");
+  if (!goal?.trim()) return;
+  const model = modelSelect.value;
+  setStatus("Agent planning…");
+  setTerminal("$ dreamcoder agent\n\nPlanning with " + model + "…");
+  try {
+    const data = await api("/api/agent/run", {
+      method: "POST",
+      body: JSON.stringify({ goal: goal.trim(), cwd: "", model, auto_apply: false }),
+    });
+    renderAgentRun(data);
+  } catch (err) {
+    setStatus("Agent error");
+    toast("Agent failed: " + err.message, "error");
+  }
+}
+
+function renderAgentRun(data) {
+  const steps = (data.plan || []).map((s, i) => `${i + 1}. ${escapeHtml(s.title)}`).join("<br>");
+  const changes = (data.changes || []).filter(c => c && c.path).map(c => `<div class="agent-change"><strong>${escapeHtml(c.path)}</strong><span>${escapeHtml(c.summary || "proposed change")}</span>${c.diff ? '<pre class="analysis-diff">' + escapeHtml(c.diff) + '</pre>' : ''}</div>`).join("");
+  const body = `
+    <div class="muted">Model: ${escapeHtml(data.model || modelSelect.value)} · Status: ${escapeHtml(data.status || "unknown")}</div>
+    <div class="analysis-section">Plan</div><div class="analysis-model-note">${steps || "No plan returned."}</div>
+    ${changes ? '<div class="analysis-section">Proposed changes</div>' + changes : ""}
+    ${data.validation?.stderr ? '<div class="analysis-section">Validation</div><pre class="analysis-diff">' + escapeHtml(data.validation.stderr) + '</pre>' : ""}
+  `;
+  const needsChangesApproval = data.status === "awaiting_approval" && changes;
+  showModal({
+    title: needsChangesApproval ? "Review model changes" : "Project agent plan",
+    bodyHtml: body,
+    applyLabel: needsChangesApproval ? "Apply changes" : "Generate changes",
+    onApply: async () => {
+      try {
+        const next = await api("/api/agent/runs/" + encodeURIComponent(data.id) + "/approve", {
+          method: "POST",
+          body: JSON.stringify({ auto_apply: Boolean(needsChangesApproval) }),
+        });
+        renderAgentRun(next);
+        if (next.status === "completed") {
+          setStatus("Ready");
+          setTerminal("$ dreamcoder agent\n\n✓ Agent completed and tests passed.\n" + ((next.validation && next.validation.stdout) || ""));
+          toast("Agent completed", "success");
+        } else {
+          setStatus("Agent: " + next.status);
+        }
+      } catch (err) {
+        toast("Agent approval failed: " + err.message, "error");
+      }
+    },
+  });
+}
+
 
 async function getSuggestions() {
   const btn = document.getElementById("suggestBtn");
@@ -151,9 +281,11 @@ async function getSuggestions() {
 }
 document.getElementById("suggestBtn").onclick = getSuggestions;
 
-modelSelect.onchange = () => {
+modelSelect.onchange = async () => {
   modelCurrent.textContent = modelSelect.value;
+  localStorage.setItem("dc_model", modelSelect.value);
   setStatus(`Model: ${modelSelect.value}`);
+  await refreshModelHealth();
   toast(`Model → ${modelSelect.value}`, "info");
 };
 
@@ -516,16 +648,13 @@ async function askAllModels() {
   setStatus("Asking all models…");
   setTerminal("$ dreamcoder ask-all\n\nFiring parallel requests…");
   try {
+    const catalog = await api("/api/models");
+    const discovered = (catalog.models || []).filter(m => m.real).map(m => m.id).slice(0, 5);
+    const models = discovered.length ? discovered : ["mock"];
     const data = await api("/api/ai/suggest-all", {
       method: "POST",
       body: JSON.stringify({
-        models: [
-          "Llama-3.1-8B-Instruct",
-          "Qwen2.5-Coder",
-          "DeepSeek-Coder",
-          "Mistral-7B-Instruct",
-          "Dolphin-Llama3",
-        ],
+        models,
         code: editor.value,
         language: "python",
         filename: currentPath,
@@ -709,7 +838,7 @@ async function sendChat(msg) {
       method: "POST",
       body: JSON.stringify({ message: text, model: modelSelect.value }),
     });
-    appendChat("assistant", (data.model ? `[${data.model}]\n` : "") + (data.content || "(empty reply)"));
+    appendChat("assistant", (data.model ? `[${data.model}${data.backend ? ` · ${data.backend}` : ""}]\n` : "") + (data.content || "(empty reply)"));
     setStatus("Ready");
     // If analysis payload, also render analysis card
     if (data.analysis) renderAnalysis(data.analysis);
@@ -734,107 +863,199 @@ document.getElementById("chatChips").onclick = (e) => {
 };
 
 /* ========== Folder analysis ========== */
+function openAnalysisDrawer() {
+  const drawer = document.getElementById("analysisDrawer");
+  const tab = document.getElementById("analysisTab");
+  const backdrop = document.getElementById("analysisBackdrop");
+  if (!drawer) return;
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  tab?.classList.add("open");
+  tab?.setAttribute("aria-expanded", "true");
+  if (backdrop) backdrop.hidden = false;
+}
+function closeAnalysisDrawer() {
+  const drawer = document.getElementById("analysisDrawer");
+  const tab = document.getElementById("analysisTab");
+  const backdrop = document.getElementById("analysisBackdrop");
+  drawer?.classList.remove("open");
+  drawer?.setAttribute("aria-hidden", "true");
+  tab?.classList.remove("open");
+  tab?.setAttribute("aria-expanded", "false");
+  if (backdrop) backdrop.hidden = true;
+}
+function initAnalysisDrawer() {
+  const tab = document.getElementById("analysisTab");
+  const close = document.getElementById("analysisClose");
+  const backdrop = document.getElementById("analysisBackdrop");
+  tab?.addEventListener("mouseenter", openAnalysisDrawer);
+  tab?.addEventListener("click", () => {
+    const open = document.getElementById("analysisDrawer")?.classList.contains("open");
+    open ? closeAnalysisDrawer() : openAnalysisDrawer();
+  });
+  close?.addEventListener("click", closeAnalysisDrawer);
+  backdrop?.addEventListener("click", closeAnalysisDrawer);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAnalysisDrawer();
+  });
+}
+initAnalysisDrawer();
+
 function renderAnalysis(data) {
-  if (typeof showAiPanel === 'function') showAiPanel('panel-chat');
-  const card = document.getElementById("analysisCard");
-  card.style.display = "block";
-  document.getElementById("analysisHealth").textContent = `${data.health ?? "—"}%`;
-  document.getElementById("analysisHealth").className = "health";
-  document.getElementById("analysisSummary").textContent = data.summary || "";
+  openAnalysisDrawer();
+  const modelInfo = data.model_analysis || {};
+  const health = data.health ?? "—";
+  document.getElementById("analysisTabHealth").textContent = health + "%";
+  document.getElementById("analysisHealthDrawer").textContent = health + "%";
+  document.getElementById("analysisModelDrawer").textContent =
+    (modelInfo.model || modelSelect.value) + (modelInfo.backend ? " · " + modelInfo.backend : "");
+  document.getElementById("analysisScope").textContent =
+    "Current indexed folder only · " + ((data.scope && data.scope.files) || []).length + " files";
+  document.getElementById("analysisSummaryDrawer").textContent =
+    modelInfo.summary || data.summary || "";
+  document.getElementById("analysisProjectType").innerHTML =
+    "<strong>Project type:</strong> " + escapeHtml(modelInfo.project_type || "Not identified yet");
 
   let html = "";
-  if (data.actions?.length) {
-    html += `<div style="margin:8px 0 4px;font-size:11px;font-weight:650">Live actions (click Apply)</div>`;
-    data.actions.forEach((a, i) => {
-      if (a.kind === "project" || a.target === "note") {
-        html += `<div class="insight"><span class="icon">↗</span><div><strong>${escapeHtml(a.title)}</strong><small>${escapeHtml(a.detail || "")}</small></div></div>`;
-      } else {
-        html += `<div class="patch" data-action-idx="${i}">
-          <div class="patch-head"><span class="patch-title">${escapeHtml(a.title)}</span><span class="patch-meta">${escapeHtml(a.path || "")}</span></div>
-          <div class="muted">${escapeHtml(a.detail || "")}</div>
-          <div class="patch-actions"><button class="apply" data-apply-action="${i}">Apply live</button></div>
-        </div>`;
-      }
+  if (modelInfo.architecture?.length) {
+    html += '<div class="analysis-section">Architecture</div><div class="analysis-model-note">' +
+      modelInfo.architecture.map(escapeHtml).join("<br>") + "</div>";
+  }
+  if (modelInfo.strengths?.length) {
+    html += '<div class="analysis-section">What is already working</div><div class="analysis-model-note">' +
+      modelInfo.strengths.map(escapeHtml).join("<br>") + "</div>";
+  }
+  if (modelInfo.risks?.length) {
+    html += '<div class="analysis-section">Risks / opportunities</div><div class="analysis-model-note">' +
+      modelInfo.risks.map(escapeHtml).join("<br>") + "</div>";
+  }
+
+  const actions = data.actions || [];
+  if (actions.length) {
+    html += '<div class="analysis-section">Model-proposed live updates</div>';
+    actions.forEach((a, i) => {
+      html += '<div class="analysis-recommendation" data-analysis-action="' + i + '">' +
+        '<div class="rec-head"><span class="rec-title">' + escapeHtml(a.title) + '</span>' +
+        '<span class="rec-priority">' + escapeHtml(a.priority || "medium") + '</span></div>' +
+        (a.path ? '<div class="rec-path">' + escapeHtml(a.path) + '</div>' : '') +
+        '<div class="rec-detail">' + escapeHtml(a.detail || a.instruction || "") + '</div>' +
+        (a.instruction ? '<div class="rec-detail"><strong>Model instruction:</strong> ' + escapeHtml(a.instruction) + '</div>' : '') +
+        '<div class="rec-actions">' +
+        (a.path ? '<button class="btn primary" data-generate-analysis="' + i + '">Generate update</button>' : '') +
+        '</div></div>';
+    });
+  } else {
+    html += '<div class="analysis-model-note">No model recommendations were returned for this folder. Try another selected model or refine the project goal.</div>';
+  }
+
+  const reports = data.file_reports || [];
+  if (reports.length) {
+    html += '<div class="analysis-section">File findings</div>';
+    reports.forEach((f) => {
+      const findings = [...(f.issues || []), ...(f.ideas || [])].slice(0, 4);
+      if (!findings.length) return;
+      html += '<div class="analysis-recommendation">' +
+        '<div class="rec-title">' + escapeHtml(f.path) + '</div>' +
+        '<div class="rec-detail">' + findings.map(escapeHtml).join('<br>') + '</div>' +
+        '</div>';
     });
   }
-  if (data.project_ideas?.length) {
-    html += `<div style="margin:8px 0 4px;font-size:11px;font-weight:650">Project recommendations</div>`;
-    data.project_ideas.forEach((idea) => {
-      html += `<div class="insight"><span class="icon">↗</span><div><strong>${escapeHtml(
-        idea.title
-      )}</strong><small>${escapeHtml(idea.detail || "")}</small></div></div>`;
-    });
-  }
-  if (data.file_reports?.length) {
-    html += `<div style="margin:10px 0 4px;font-size:11px;font-weight:650">Per-file</div>`;
-    data.file_reports.forEach((f) => {
-      html += `<div class="analysis-file"><span class="score">${f.score}</span><strong>${escapeHtml(
-        f.path
-      )}</strong>`;
-      (f.issues || []).forEach((iss) => {
-        html += `<div class="analysis-idea">⚠ ${escapeHtml(iss)}</div>`;
-      });
-      (f.ideas || []).forEach((idea) => {
-        html += `<div class="analysis-idea">💡 ${escapeHtml(idea)}</div>`;
-      });
-      html += `</div>`;
-    });
-  }
-  document.getElementById("analysisBody").innerHTML = html;
-  window._lastAnalysisActions = data.actions || [];
-  document.getElementById("analysisBody").onclick = (e) => {
-    const btn = e.target.closest("[data-apply-action]");
-    if (!btn) return;
-    const idx = Number(btn.dataset.applyAction);
-    const action = (window._lastAnalysisActions || [])[idx];
-    if (!action || !action.path) return;
-    applyAnalysisAction(action);
+
+  document.getElementById("analysisBodyDrawer").innerHTML = html;
+  window._analysisActions = actions;
+  window._analysisProposals = {};
+  document.getElementById("analysisBodyDrawer").onclick = async (e) => {
+    const generate = e.target.closest("[data-generate-analysis]");
+    const apply = e.target.closest("[data-apply-analysis]");
+    if (generate) {
+      const idx = Number(generate.dataset.generateAnalysis);
+      await generateAnalysisUpdate(idx);
+    }
+    if (apply) {
+      const idx = Number(apply.dataset.applyAnalysis);
+      await applyAnalysisProposal(idx);
+    }
   };
-  card.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-function applyAnalysisAction(action) {
-  playRefreshAnimation("Applying fix…");
-  fileBuffers[action.path] = action.code || "";
-  // ensure in tree
+async function generateAnalysisUpdate(index) {
+  const action = (window._analysisActions || [])[index];
+  if (!action?.path) return;
+  const card = document.querySelector('[data-analysis-action="' + index + '"]');
+  const button = card?.querySelector("[data-generate-analysis]");
+  if (button) { button.disabled = true; button.textContent = "Generating…"; }
+  try {
+    const data = await api("/api/ai/analyze-action", {
+      method: "POST",
+      body: JSON.stringify({
+        model: modelSelect.value,
+        path: action.path,
+        instruction: action.instruction || action.detail || action.title,
+        project_type: document.getElementById("analysisProjectType")?.textContent || "",
+      }),
+    });
+    window._analysisProposals[index] = data;
+    if (card) {
+      card.querySelector(".rec-actions").innerHTML =
+        '<button class="btn" data-apply-analysis="' + index + '">Apply live</button>';
+      const diff = document.createElement("div");
+      diff.className = "analysis-diff";
+      diff.textContent = data.diff || "(model made no file changes)";
+      card.appendChild(diff);
+    }
+    toast("Model update generated — review the diff", "success");
+  } catch (err) {
+    if (button) { button.disabled = false; button.textContent = "Generate update"; }
+    toast("Model update failed: " + err.message, "error");
+  }
+}
+
+async function applyAnalysisProposal(index) {
+  const proposal = (window._analysisProposals || {})[index];
+  if (!proposal?.path || proposal.content == null) return;
+  const action = (window._analysisActions || [])[index] || {};
+  fileBuffers[proposal.path] = proposal.content;
   renderFileTree(Object.keys(fileBuffers));
-  openPath(action.path);
-  api("/api/files/save", {
+  openPath(proposal.path);
+  await api("/api/files/save", {
     method: "POST",
     body: JSON.stringify({
-      path: action.path,
-      content: action.code || "",
-      language: langFromPath(action.path),
+      path: proposal.path,
+      content: proposal.content,
+      language: langFromPath(proposal.path),
     }),
-  }).catch(() => {});
-  toast(`Applied: ${action.title}`, "success");
-  setTerminal(`$ dreamcoder apply-action\n\n✓ ${action.title}\n  → ${action.path}`);
+  });
+  toast("Applied model update: " + (action.title || proposal.path), "success");
+  setTerminal("$ dreamcoder model-update\\n\\n✓ " + proposal.path + "\\n  " + (proposal.summary || ""));
   refreshMonitor();
+  closeAnalysisDrawer();
 }
+
 
 async function runFolderAnalysis() {
   const btn = document.getElementById("analyzeBtn");
   if (btn) btn.disabled = true;
-  setStatus("Analyzing folder…");
-  setTerminal("$ dreamcoder analyze-folder\n\nScanning indexed files…");
+  openAnalysisDrawer();
+  setStatus("Analyzing folder with selected model…");
+  setTerminal("$ dreamcoder analyze-folder\\n\\nScanning the indexed folder…");
   try {
-    const data = await api("/api/ai/analyze-folder", { method: "POST", body: "{}" });
+    const data = await api("/api/ai/analyze-folder", {
+      method: "POST",
+      body: JSON.stringify({ model: modelSelect.value }),
+    });
     renderAnalysis(data);
     setTerminal(
-      `$ dreamcoder analyze-folder\n\n${data.summary}\n\n` +
-        `Project ideas: ${(data.project_ideas || []).length}\n` +
-        `Files scored: ${(data.file_reports || []).length}\n` +
-        `Done in ${data.latency_ms}ms`
+      "$ dreamcoder analyze-folder\\n\\n" +
+      data.summary + "\\n\\n" +
+      "Scope: " + ((data.scope && data.scope.files) || []).length + " indexed files\\n" +
+      "Model: " + ((data.model_analysis && data.model_analysis.model) || modelSelect.value) + "\\n" +
+      "Done in " + data.latency_ms + "ms"
     );
     setStatus("Ready");
-    toast(`Folder analysis · health ${data.health}%`, "success");
-    appendChat(
-      "assistant",
-      `Folder analysis complete.\n${data.summary}\n\nTop idea: ${(data.project_ideas && data.project_ideas[0]?.title) || "—"}`
-    );
+    toast("Folder analysis complete", "success");
   } catch (err) {
-    setTerminal(`$ dreamcoder analyze-folder\n\n✗ ${err.message}`);
-    toast("Analysis failed – backend offline?", "error");
+    setTerminal("$ dreamcoder analyze-folder\\n\\n✗ " + err.message);
+    toast("Analysis failed – selected model unavailable?", "error");
     setStatus("Offline");
   } finally {
     if (btn) btn.disabled = false;
@@ -1018,7 +1239,7 @@ async function readFileBlob(file) {
   });
 }
 
-async function ingestFiles(rawList, rootName) {
+async function ingestFiles(rawList, rootName, replaceExisting = false) {
   const payload = [];
   for (const item of rawList) {
     const path = (item.path || item.file?.name || "file").replace(/\\/g, "/");
@@ -1041,6 +1262,12 @@ async function ingestFiles(rawList, rootName) {
   if (!payload.length) {
     toast("No text source files found in drop", "info");
     return;
+  }
+
+  if (replaceExisting) {
+    fileBuffers = {};
+    currentPath = "";
+    renderFileTree([]);
   }
 
   setStatus(`Indexing ${payload.length} files…`);
@@ -1069,7 +1296,7 @@ async function ingestFiles(rawList, rootName) {
   try {
     const data = await api("/api/files/bulk", {
       method: "POST",
-      body: JSON.stringify({ files: payload, root_name: rootName || "dropped-project" }),
+      body: JSON.stringify({ files: payload, root_name: rootName || "dropped-project", replace_existing: replaceExisting }),
     });
     setTerminal(
       `$ dreamcoder import\n\n✓ Indexed ${data.indexed} files\n` +
@@ -1162,7 +1389,7 @@ if (dropZone) {
       const entry = e.dataTransfer.items[0].webkitGetAsEntry?.();
       if (entry?.isDirectory) rootName = entry.name;
     }
-    await ingestFiles(list, rootName);
+    await ingestFiles(list, rootName, true);
   });
   dropZone.addEventListener("click", (e) => {
     if (e.target.closest("input")) return;
@@ -1203,7 +1430,7 @@ document.querySelector(".workspace")?.addEventListener("drop", async (e) => {
   if (e.target.closest("#dropZone")) return;
   e.preventDefault();
   const list = await collectDroppedItems(e.dataTransfer);
-  if (list.length) await ingestFiles(list, "dropped-project");
+  if (list.length) await ingestFiles(list, "dropped-project", true);
 });
 
 /* ========== Hugging Face catalog ========== */
@@ -1923,7 +2150,7 @@ const COMMANDS = [
   { label: "Run code", run: () => runCode() },
   { label: "Suggest", run: () => getSuggestions() },
   { label: "Ask all models", run: () => askAllModels() },
-  { label: "Analyze folder", run: () => runFolderAnalysis() },
+  { label: "Analyze folder", run: () => runFolderAnalysis() },\n  { label: "Run project agent", run: () => runProjectAgent() },
   { label: "Stream completion", run: () => streamComplete() },
   { label: "Open Debug page", run: () => (window.location.href = "debug.html") },
   { label: "Undo last patch", run: () => undoLast() },
@@ -2354,5 +2581,6 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   if (st && (!st.textContent || st.textContent === "Ready")) {
     /* keep */
   }
+  loadAvailableModels().catch(() => {});
   console.log("DreamCoder UI ready");
 })();

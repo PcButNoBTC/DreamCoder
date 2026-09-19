@@ -19,11 +19,12 @@ class RunBody(BaseModel):
     timeout:int=60
 
 class ApprovalBody(BaseModel):
-    auto_apply:bool=True
+    auto_apply:bool=False
 
 @router.post("/run")
 async def run_agent(body:RunBody):
-    cwd=str(Path(body.cwd).expanduser().resolve())
+    workspace = Path(body.cwd).expanduser() if body.cwd else Path(__file__).resolve().parents[2]
+    cwd=str(workspace.resolve())
     if not Path(cwd).exists(): raise HTTPException(400,f"Workspace does not exist: {cwd}")
     run=await runtime.run(AgentRequest(**body.model_dump(),cwd=cwd))
     return run.to_dict()

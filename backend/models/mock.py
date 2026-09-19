@@ -13,7 +13,7 @@ import re
 import time
 from typing import Any
 
-from .base import BaseModel, CodeContext, InferenceResult, Suggestion
+from .base import BaseModel, ChatContext, ChatResult, CodeContext, InferenceResult, Suggestion
 
 
 class MockModel(BaseModel):
@@ -37,6 +37,29 @@ class MockModel(BaseModel):
             cached=False,
             architecture_insights=insights,
             health=health,
+        )
+
+    async def chat(self, context: ChatContext) -> ChatResult:
+        start = time.perf_counter()
+        msg = (context.message or "").strip()
+        mode = (context.mode or "project").lower()
+        if context.project_context:
+            content = (
+                f"{self.display_name} (mock backend) received your project request.\\n\\n"
+                f"Request: {msg}\\n\\n"
+                "The selected model is wired to this chat path, but this installation is using the mock backend. "
+                "Connect the selected model's real provider to get generated model responses."
+            )
+        else:
+            content = (
+                f"{self.display_name} (mock backend) received: {msg}\\n\\n"
+                "The selected model is wired to this chat path, but this installation is using the mock backend."
+            )
+        return ChatResult(
+            content=content,
+            latency_ms=int((time.perf_counter() - start) * 1000) + 50,
+            model=self.display_name,
+            backend="mock",
         )
 
     async def health_check(self) -> dict[str, Any]:

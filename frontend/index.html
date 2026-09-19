@@ -23,28 +23,12 @@
         <button id="streamBtn" class="btn" title="Stream completion">≋ Stream</button>
         <button id="generateBtn" class="btn" title="Generate full multi-file project">✦ Generate</button>
         <button id="analyzeBtn" class="btn" title="Deep folder / project analysis">◎ Analyze</button>
+        <button id="agentBtn" class="btn" title="Run project agent">◆ Agent</button>
         <button id="evolveBtn" class="btn evolve" title="Ask AI to improve the app">✧ Evolve</button>
         <select id="modelSelect" class="select">
-          <optgroup label="Code-specialized">
-            <option value="Qwen2.5-Coder">Qwen2.5-Coder</option>
-            <option value="StarCoder2">StarCoder2</option>
-            <option value="DeepSeek-Coder">DeepSeek-Coder</option>
-            <option value="CodeLlama-34B">CodeLlama-34B</option>
-          </optgroup>
-          <optgroup label="Open / general (less restricted)">
-            <option value="Llama-3.1-8B-Instruct" selected>Llama-3.1-8B-Instruct</option>
-            <option value="Llama-3.1-70B-Instruct">Llama-3.1-70B-Instruct</option>
-            <option value="Mistral-7B-Instruct">Mistral-7B-Instruct</option>
-            <option value="Mixtral-8x7B">Mixtral-8x7B</option>
-            <option value="Yi-34B-Chat">Yi-34B-Chat</option>
-            <option value="Dolphin-Llama3">Dolphin-Llama3 (uncensored)</option>
-            <option value="WizardLM-2">WizardLM-2</option>
-          </optgroup>
-          <optgroup label="Local">
-            <option value="Local Model">Local Model (Ollama / HF)</option>
-            <option value="Ollama">Ollama (any pulled model)</option>
-          </optgroup>
+          <option value="mock">Loading models…</option>
         </select>
+        <span id="modelStatus" class="model-status" title="Selected provider status">checking</span>
       </div>
     </header>
 
@@ -250,8 +234,8 @@ Type a command and press Enter (runs on the machine hosting the backend).
 
         <section class="card" data-ai-panel="panel-models">
           <div class="card-head"><span>Model</span><span class="badge">LOCAL / OPEN</span></div>
-          <div class="model-current" id="modelCurrent">Llama-3.1-8B-Instruct</div>
-          <div class="muted">Open, less-restricted instruction model</div>
+          <div class="model-current" id="modelCurrent">Discovering provider…</div>
+          <div class="muted">Selected provider/model and live availability</div>
         </section>
 
         <section class="card" id="hfCard" data-ai-panel="panel-models">
@@ -305,6 +289,23 @@ Type a command and press Enter (runs on the machine hosting the backend).
     </main>
   </div>
 
+  <button id="analysisTab" class="analysis-tab" type="button" aria-expanded="false" title="Folder Analysis">
+    <span>◎</span><span>Folder Analysis</span><strong id="analysisTabHealth">—</strong>
+  </button>
+  <div id="analysisBackdrop" class="analysis-backdrop" hidden></div>
+  <aside id="analysisDrawer" class="analysis-drawer" aria-label="Folder analysis" aria-hidden="true">
+    <div class="analysis-drawer-head">
+      <div><div class="analysis-drawer-title">◎ Folder Analysis</div><div id="analysisScope" class="muted">Current indexed folder only</div></div>
+      <button id="analysisClose" class="icon-btn" type="button" title="Close">×</button>
+    </div>
+    <div class="analysis-drawer-status">
+      <span id="analysisHealthDrawer" class="health">—</span>
+      <span id="analysisModelDrawer" class="badge">MODEL</span>
+    </div>
+    <div id="analysisSummaryDrawer" class="analysis-summary"></div>
+    <div id="analysisProjectType" class="analysis-project-type"></div>
+    <div id="analysisBodyDrawer" class="analysis-drawer-body"></div>
+  </aside>
   <div id="commandPalette" class="cmd-palette" style="display:none">
     <input id="cmdInput" class="cmd-input" placeholder="Type a command… (theme peach, particles on, analyze, generate…)" />
     <div id="cmdResults" class="cmd-results"></div>
