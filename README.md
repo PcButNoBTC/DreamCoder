@@ -187,3 +187,21 @@ API:
 - `POST /api/ai/chat`
 - `GET /api/ai/monitor`
 - `POST /api/ai/analyze-folder`
+
+## Project-level agent runtime
+
+DreamCoder now exposes a project-scoped agent loop at `/api/agent`.
+
+The runtime separates **planning → approval → tool execution → validation → repair state → diff review** and persists runs, events, and tool calls in SQLite. The agent works inside an explicit workspace boundary and does not receive an unrestricted shell primitive.
+
+### Run an agent task
+
+```bash
+curl -X POST http://localhost:8000/api/agent/run \
+  -H "Content-Type: application/json" \
+  -d '{"goal":"Fix the failing tests and explain the change","cwd":"/path/to/project","auto_apply":false}'
+```
+
+Write/patch operations stop at an approval boundary by default. After reviewing the plan, approve the run with `POST /api/agent/runs/{run_id}/approve`.
+
+Agent tools are explicit: `read_file`, `search`, `write_file`, `apply_patch`, `run`, `test`, `git_status`, and `git_diff`. Command execution is restricted to a small development-tool allowlist and paths cannot escape the workspace.
