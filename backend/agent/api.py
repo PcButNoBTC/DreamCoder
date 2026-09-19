@@ -19,7 +19,7 @@ class RunBody(BaseModel):
     timeout:int=60
 
 class ApprovalBody(BaseModel):
-    auto_apply:bool=True
+    auto_apply:bool=False
 
 @router.post("/run")
 async def run_agent(body:RunBody):
