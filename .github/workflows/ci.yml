@@ -28,3 +28,8 @@ jobs:
         run: |
           pytest tests/test_permissions.py -q
           pytest tests/test_backup_manager.py -q
+
+      - name: Syntax checks
+        run: |
+          python -m py_compile $(find backend -name '*.py')
+          node --check frontend/app.js
