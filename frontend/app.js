@@ -515,6 +515,34 @@ function renderPatches(patches) {
 
 function applyPatch(patch, el) {
   if (!patch) return;
+  if (patch.diff && !patch._confirmed) {
+    showModal({
+      title:"Review change: "+(patch.title||"patch"),
+      bodyHtml:'<p class="muted">'+escapeHtml(patch.description||"")+'</p><div class="diff-toggle"><button class="btn diff-mode active" data-mode="unified">Unified</button><button class="btn diff-mode" data-mode="split">Side-by-side</button></div><pre class="diff-unified">'+escapeHtml(patch.diff)+'</pre><div class="diff-split" hidden>'+renderSplitDiff(patch.diff)+'</div>',
+      applyLabel:"Apply",
+      onApply:()=>applyPatch({...patch,_confirmed:true},el)
+    });
+    const root=document.getElementById("modalRoot");
+    root?.querySelectorAll(".diff-mode").forEach(btn=>btn.onclick=()=>{
+      root.querySelectorAll(".diff-mode").forEach(b=>b.classList.toggle("active",b===btn));
+      const split=btn.dataset.mode==="split"; root.querySelector(".diff-unified").hidden=split; root.querySelector(".diff-split").hidden=!split;
+    });
+    return;
+  }
+  return applyPatchUnsafe(patch,el);
+}
+function renderSplitDiff(unified) {
+  const lines=(unified||"").split("\n"),left=[],right=[];
+  for(const line of lines){
+    if(line.startsWith("-")&&!line.startsWith("---"))left.push(line);
+    else if(line.startsWith("+")&&!line.startsWith("+++"))right.push(line);
+    else{left.push(line);right.push(line);}
+  }
+  return '<div class="diff-cols"><pre class="diff-col">'+escapeHtml(left.join("\n"))+'</pre><pre class="diff-col">'+escapeHtml(right.join("\n"))+'</pre></div>';
+}
+
+function applyPatchUnsafe(patch, el) {
+  if (!patch) return;
   const target = (patch.target || "css").toLowerCase();
   const code = patch.code || "";
   try {
