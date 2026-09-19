@@ -2909,3 +2909,7 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
  let lastMtime=0;
  setInterval(async()=>{if(!currentPath)return;try{const s=await api("/api/files/stat?path="+encodeURIComponent(currentPath));if(!s.exists)return;if(!lastMtime){lastMtime=s.mtime_ns;return;}if(s.mtime_ns!==lastMtime){lastMtime=s.mtime_ns;if(document.activeElement===editor||editor.value!==fileBuffers[currentPath])showSyncBanner("The file changed outside DreamCoder. Review before overwriting it.","warn");}}catch(_){}},3000);
 })();
+
+if(window.dreamcoderDesktop?.onUpdateReady){
+ window.dreamcoderDesktop.onUpdateReady(info=>{if(confirm("DreamCoder "+(info?.version||"")+" is ready. Restart to install?"))window.dreamcoderDesktop.installUpdate();});
+}
