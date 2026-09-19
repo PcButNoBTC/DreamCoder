@@ -1,0 +1,50 @@
+"""GitHub App user-to-server OAuth flow with signed state."""
+from __future__ import annotations
+import hashlib,hmac,os,secrets,time
+from urllib.parse import urlencode
+import httpx
+import db
+def _cfg():
+    return {"client_id":os.getenv("DREAMCODER_GITHUB_CLIENT_ID",""),"client_secret":os.getenv("DREAMCODER_GITHUB_CLIENT_SECRET",""),"callback":os.getenv("DREAMCODER_GITHUB_CALLBACK","http://127.0.0.1:8000/api/github/oauth/callback"),"secret":os.getenv("DREAMCODER_OAUTH_STATE_SECRET","")}
+def configured(): c=_cfg(); return bool(c["client_id"] and c["client_secret"] and c["secret"])
+def start_url():
+    c=_cfg(); nonce=secrets.token_urlsafe(24); exp=int(time.time())+600; payload=f"{nonce}.{exp}"
+    sig=hmac.new(c["secret"].encode(),payload.encode(),hashlib.sha256).hexdigest(); state=payload+"."+sig
+    db.set_setting("github_oauth_state",state)
+    return "https://github.com/login/oauth/authorize?"+urlencode({"client_id":c["client_id"],"redirect_uri":c["callback"],"state":state})
+def verify_state(state):
+    c=_cfg(); saved=db.get_setting("github_oauth_state","")
+    if not state or not saved or not hmac.compare_digest(state,saved): return False
+    try:
+        payload,sig=state.rsplit(".",1); _,exp=payload.split(".",1)
+        return int(exp)>=int(time.time()) and hmac.compare_digest(sig,hmac.new(c["secret"].encode(),payload.encode(),hashlib.sha256).hexdigest())
+    except Exception:return False
+async def exchange(code):
+    c=_cfg()
+    async with httpx.AsyncClient(timeout=20) as client:
+        r=await client.post("https://github.com/login/oauth/access_token",data={"client_id":c["client_id"],"client_secret":c["client_secret"],"code":code},headers={"Accept":"application/json"}); r.raise_for_status(); d=r.json()
+    if "access_token" not in d: raise RuntimeError(d.get("error_description") or "GitHub OAuth failed")
+    db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800))))
+    os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
+async def user():
+    token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    if not token:return {"ok":False,"connected":False}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r=await c.get("https://api.github.com/user",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"}); r.raise_for_status(); d=r.json()
+    return {"ok":True,"connected":True,"login":d.get("login"),"avatar":d.get("avatar_url"),"token_expires_at":db.get_setting("github_oauth_expires_at","")}
+async def installations():
+    token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    if not token:return {"ok":False,"installations":[]}
+    async with httpx.AsyncClient(timeout=20) as c:
+        r=await c.get("https://api.github.com/user/installations",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}); r.raise_for_status(); d=r.json()
+    return {"ok":True,"installations":[{"id":x["id"],"account":x.get("account",{}).get("login"),"target_type":x.get("target_type")} for x in d.get("installations",[])]}
+async def repositories(installation_id=None):
+    token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    if not token:return {"ok":False,"repositories":[]}
+    url=f"https://api.github.com/user/installations/{int(installation_id)}/repositories?per_page=100" if installation_id else "https://api.github.com/user/repos?per_page=100&sort=updated"
+    async with httpx.AsyncClient(timeout=20) as c:
+        r=await c.get(url,headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"}); r.raise_for_status(); d=r.json()
+    arr=d.get("repositories",d if isinstance(d,list) else [])
+    return {"ok":True,"repositories":[{"full_name":x.get("full_name"),"private":x.get("private"),"default_branch":x.get("default_branch")} for x in arr]}
+def disconnect():
+    db.set_setting("github_oauth_token",""); db.set_setting("github_oauth_expires_at",""); os.environ.pop("GITHUB_TOKEN",None); return {"ok":True,"connected":False}
