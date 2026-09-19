@@ -147,6 +147,13 @@ class AIRouter:
         use_cache: bool = False,
     ) -> ChatResult:
         """Send conversational requests to the exact selected model adapter."""
+        if os.getenv("DREAMCODER_CHAT_USE_RACE","0").lower() in {"1","true","yes"}:
+            from model_race import race, build_lanes_from_env
+            lanes=build_lanes_from_env()
+            if lanes:
+                result=await race(lanes,context,expected_format=None,min_responses=1)
+                if result.winner:
+                    return ChatResult(content=result.winner.content,latency_ms=result.duration_ms,model=result.winner.lane.model,backend=result.winner.lane.kind)
         if context.mode == "project":
             context.project_context = self._project_context()
         model = self.get_model(model_name)
