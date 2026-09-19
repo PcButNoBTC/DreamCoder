@@ -81,3 +81,9 @@ class BaseModel(ABC):
             "supports_streaming": self.supports_streaming,
             "type": self.__class__.__name__,
         }
+
+
+    async def stream_chat(self, context: ChatContext):
+        """Yield text chunks. Adapters that do not support native streaming fall back to chat()."""
+        result = await self.chat(context)
+        yield result.content
