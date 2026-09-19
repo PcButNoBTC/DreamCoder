@@ -40,6 +40,7 @@ class GitHubSync:
             "repo": self.repo or None,
             "branch": self.branch,
             "auth": bool(self.token),
+            "mode": "autosync" if self.enabled else "manual",
         }
 
     def _headers(self) -> dict[str, str]:
@@ -48,6 +49,30 @@ class GitHubSync:
             "Authorization": f"Bearer {self.token}",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+
+    async def test_connection(self) -> dict[str, Any]:
+        if not self.configured:
+            return {"ok": False, "reason": "not configured"}
+        url=f"https://api.github.com/repos/{self.repo}"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                r=await client.get(url,headers=self._headers())
+                if r.status_code!=200:
+                    return {"ok":False,"status_code":r.status_code,"error":r.text[:500]}
+                data=r.json()
+                return {"ok":True,"repo":data.get("full_name"),"default_branch":data.get("default_branch"),"private":data.get("private")}
+        except Exception as exc:
+            return {"ok":False,"error":str(exc)}
+
+    async def sync_file_with_backup(self, root: str, path: str, content: str, message: str | None = None) -> dict[str, Any]:
+        result=await self.sync_file(path,content,message)
+        if result.get("ok") or result.get("skipped"): return result
+        try:
+            from backup_manager import write_backup
+            result["backup"]=write_backup(root,path,content,reason=f"github sync failed: {result.get('error','unknown')}")
+        except Exception as exc:
+            result["backup"]={"ok":False,"error":str(exc)}
+        return result
 
     async def sync_file(self, path: str, content: str, message: str | None = None) -> dict[str, Any]:
         if not self.configured:
