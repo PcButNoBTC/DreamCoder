@@ -49,7 +49,7 @@ class IndexWatcher:
         self._observer = None
         self._polling = False
         self._stop = False
-        self._seen: dict[str, float] = {}
+        self._seen: dict[str, float] = {}\n        self._pending: dict[str, tuple[str,str]] = {}\n        self._lock = threading.Lock()\n        self._debounce_seconds = float(os.getenv("DREAMCODER_WATCH_DEBOUNCE", "0.35"))
 
     def start(self) -> dict:
         if not self.root.exists():
@@ -86,7 +86,7 @@ class IndexWatcher:
                 try:
                     content = path.read_text(encoding="utf-8", errors="ignore")
                     rel = str(path.relative_to(self.root)).replace("\\", "/")
-                    self.on_change(rel, content, _lang_for(rel))
+                    self._emit(rel, content, _lang_for(rel))
                     self._seen[str(path)] = path.stat().st_mtime
                     count += 1
                 except Exception:
@@ -132,7 +132,7 @@ if HAS_WATCHDOG:
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")
                 rel = str(path.relative_to(self.w.root)).replace("\\", "/")
-                self.w.on_change(rel, content, _lang_for(rel))
+                self.w._emit(rel, content, _lang_for(rel))
             except Exception:
                 pass
 
@@ -146,7 +146,7 @@ if HAS_WATCHDOG:
                 path = Path(event.src_path)
                 rel = str(path.relative_to(self.w.root)).replace("\\", "/")
                 # Caller handles delete via a special empty content or separate hook
-                self.w.on_change(rel, "", "deleted")
+                self.w._emit(rel, "", "deleted")
             except Exception:
                 pass
 else:
