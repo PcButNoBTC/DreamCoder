@@ -672,6 +672,10 @@ async def start_watch(req: WatchRequest):
     root = req.root
     if not Path(root).exists():
         raise HTTPException(400, f"Path does not exist: {root}")
+    try:
+        workspace.set_root(root)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     if _watcher:
         _watcher.stop()
