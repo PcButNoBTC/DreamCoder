@@ -5,6 +5,7 @@ DreamCoder API – full personal IDE backend
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import os
 import time
@@ -19,7 +20,7 @@ import db
 from ai_router import AIRouter, MODEL_REGISTRY
 from models.base import ChatContext, CodeContext
 from watcher import IndexWatcher
-from analyzer import analyze_folder, monitor_insights, chat_reply
+from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, self_heal, files_to_zip
 from agent.api import router as agent_router
@@ -131,6 +132,15 @@ class ChatRequest(BaseModel):
     model: str = "Llama-3.1-8B-Instruct"
     mode: str = "project"  # project | general
 
+
+class FolderAnalysisRequest(BaseModel):
+    model: str = "Llama-3.1-8B-Instruct"
+
+class AnalysisActionRequest(BaseModel):
+    model: str = "Llama-3.1-8B-Instruct"
+    path: str
+    instruction: str
+    project_type: str = ""
 
 class ProjectContextRequest(BaseModel):
     goal: str = ""
@@ -683,17 +693,60 @@ async def ai_monitor():
 # ---------- Folder analysis ----------
 
 @app.post("/api/ai/analyze-folder")
-async def api_analyze_folder():
+async def api_analyze_folder(req: FolderAnalysisRequest):
     goal = db.get_setting("project_goal", "") or ""
-    result = analyze_folder(router.index, project_goal=goal)
+    result = await analyze_folder_with_model(
+        router.index, model_name=req.model, project_goal=goal, router=router
+    )
     db.add_history(
         "analyze",
-        "analyzer",
+        result.get("model_analysis", {}).get("model", req.model),
         goal or "(no goal)",
         result.get("summary", ""),
         result.get("latency_ms", 0),
     )
     return result
+
+
+@app.post("/api/ai/analyze-action")
+async def api_analyze_action(req: AnalysisActionRequest):
+    """Generate a model-authored update for one indexed file, without applying it."""
+    indexed = {f["path"] for f in router.index.list_files()}
+    if req.path not in indexed:
+        raise HTTPException(400, "Analysis actions may only target files in the indexed folder")
+
+    full = router.index.get_file(req.path) or {}
+    current = full.get("content") or ""
+    language = full.get("language") or "text"
+    prompt = (
+        "You are implementing a safe improvement to the project file below.\n"
+        f"Project type: {req.project_type or \"unknown\"}\n"
+        f"Instruction: {req.instruction}\n\n"
+        "Return ONLY valid JSON: {\"path\":\"...\",\"content\":\"complete replacement file content\",\"summary\":\"short explanation\"}\n"
+        "Rules: modify ONLY this file; preserve behavior unless instructed; do not invent dependencies; return the COMPLETE file; no markdown fences.\n\n"
+        f"FILE ({language}):\n{current}"
+    )
+
+    from models.base import ChatContext
+    result = await router.chat(
+        req.model, ChatContext(message=prompt, mode="analysis", project_context=current), use_cache=False
+    )
+    parsed = _extract_json(result.content)
+    if not parsed or "content" not in parsed:
+        raise HTTPException(502, f"Selected model did not return a structured update: {result.content[:600]}")
+    proposed = str(parsed["content"])
+    diff = "".join(difflib.unified_diff(
+        current.splitlines(True), proposed.splitlines(True),
+        fromfile=req.path, tofile=req.path,
+    ))
+    return {
+        "path": req.path,
+        "content": proposed,
+        "summary": str(parsed.get("summary") or "Model-proposed update"),
+        "diff": diff,
+        "model": result.model,
+        "backend": result.backend,
+    }
 
 
 
