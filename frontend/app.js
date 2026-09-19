@@ -1931,7 +1931,7 @@ function renderGenerated(data) {
   if (applyRow) applyRow.style.display = data.files?.length ? "flex" : "none";
 }
 
-async async function loadGeneratedIntoWorkspace() {
+async function loadGeneratedIntoWorkspace() {
   if (!lastGenerated?.files?.length) {
     toast("Generate a project first", "info");
     return;
