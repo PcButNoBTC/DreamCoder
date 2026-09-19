@@ -16,6 +16,11 @@ class ProviderRuntime:
     def __init__(self):
         self.stats:dict[str,ProviderStats]={}; self.capabilities:dict[str,set[str]]={}
     def register(self,provider:str,capabilities:set[str]|None=None): self.capabilities[provider]=capabilities or {"chat","code","json"}
+    def record_usage(self,provider:str,input_tokens:int=0,output_tokens:int=0,cost_usd:float|None=None):
+        s=self.stats.setdefault(provider,ProviderStats()); total=input_tokens+output_tokens; s.tokens+=total
+        if cost_usd is not None: s.cost+=float(cost_usd)
+        else:
+            rate=float(__import__("os").getenv("DREAMCODER_COST_PER_1K_TOKENS","0")); s.cost+=total/1000*rate
     def snapshot(self):
         return {k:{"requests":v.requests,"successes":v.successes,"failures":v.failures,"success_rate":v.success_rate,"avg_latency_ms":v.avg_latency_ms,"tokens":v.tokens,"cost_usd":v.cost} for k,v in self.stats.items()}
     async def call(self,provider:str,fn:Callable[[],Awaitable[Any]],retries:int=2,timeout:float=120.0)->Any:
