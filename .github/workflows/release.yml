@@ -24,6 +24,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        env:
+          SOURCE_DATE_EPOCH: 0
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
@@ -51,6 +53,9 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --${{ matrix.target }} --publish never
+      - name: Verify deterministic artifact manifest
+        shell: bash
+        run: python scripts/verify_reproducible.py electron/dist > electron/dist/RELEASE-MANIFEST.txt
       - name: Hash release artifacts
         shell: bash
         run: |
