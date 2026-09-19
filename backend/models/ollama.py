@@ -49,12 +49,13 @@ class OllamaModel(BaseModel):
                 data = resp.json()
                 raw = data.get("response", "")
         except Exception as exc:
-            # Graceful fallback so the UI never breaks
-            from .mock import MockModel
-            fallback = MockModel(display_name=f"Ollama({self.model_name}) [fallback]")
-            result = await fallback.complete(context)
-            result.model = f"Ollama({self.model_name}) – offline, using mock"
-            return result
+            return InferenceResult(
+                suggestions=[],
+                latency_ms=int((time.perf_counter() - start) * 1000),
+                model=f"Ollama/{self.model_name}",
+                cached=False,
+                health={"status": "error", "backend": "ollama", "requested": self.model_name, "error": str(exc)},
+            )
 
         suggestions = self._parse_suggestions(raw)
         latency = int((time.perf_counter() - start) * 1000)
