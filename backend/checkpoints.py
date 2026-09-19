@@ -11,7 +11,7 @@ def _root(root:str|Path)->Path:
     return p
 def _files(root:Path):
     for p in root.rglob("*"):
-        if not p.is_file() or any(part in IGNORED or part.startswith(".git") for part in p.relative_to(root).parts): continue
+        if not p.is_file() or any(part in IGNORED or part == ".git" for part in p.relative_to(root).parts): continue
         try: yield p
         except OSError: pass
 def create(root:str|Path, reason:str="checkpoint")->dict[str,Any]:
