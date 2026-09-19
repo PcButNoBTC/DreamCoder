@@ -4,6 +4,7 @@ from pathlib import Path
 from agent.permissions import PermissionError, command_allowed, workspace_path
 from agent.runtime import AgentRuntime
 from agent.tools import ToolRegistry
+from models import ChatContext, MockModel
 
 def test_workspace_cannot_escape():
     root=tempfile.mkdtemp()
@@ -35,3 +36,10 @@ def test_read_and_search(tmp_path: Path):
 
 def test_runtime_constructs():
     assert AgentRuntime() is not None
+
+def test_selected_model_chat_path():
+    import asyncio
+    result = asyncio.run(MockModel("Dolphin-Llama3").chat(ChatContext(message="hello", mode="general")))
+    assert result.model == "Dolphin-Llama3"
+    assert result.backend == "mock"
+    assert "hello" in result.content
