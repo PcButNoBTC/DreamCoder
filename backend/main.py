@@ -823,7 +823,7 @@ async def api_analyze_action(req: AnalysisActionRequest):
     language = full.get("language") or "text"
     prompt = (
         "You are implementing a safe improvement to the project file below.\n"
-        f"Project type: {req.project_type or \"unknown\"}\n"
+        f"Project type: {req.project_type or 'unknown'}\n"
         f"Instruction: {req.instruction}\n\n"
         "Return ONLY valid JSON: {\"path\":\"...\",\"content\":\"complete replacement file content\",\"summary\":\"short explanation\"}\n"
         "Rules: modify ONLY this file; preserve behavior unless instructed; do not invent dependencies; return the COMPLETE file; no markdown fences.\n\n"
