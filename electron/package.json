@@ -7,7 +7,7 @@
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "e2e": "playwright test ../e2e"
+    "e2e": "playwright test"
   },
   "build": {
     "appId": "dev.dreamcoder.app",
