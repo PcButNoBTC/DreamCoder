@@ -2893,3 +2893,21 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   editor?.addEventListener("input",()=>{try{localStorage.setItem(key,JSON.stringify({path:currentPath,content:editor.value,ts:Date.now()}))}catch(_){}});
   window.addEventListener("beforeunload",()=>{try{localStorage.setItem(key,JSON.stringify({path:currentPath,content:editor.value,ts:Date.now()}))}catch(_){}});
 })();
+
+(function externalEditGuard(){
+ let lastMtime=0;
+ setInterval(async()=>{
+   if(!currentPath)return;
+   try{
+     const s=await api("/api/files/stat?path="+encodeURIComponent(currentPath));
+     if(!s.exists)return;
+     if(!lastMtime){lastMtime=s.mtime_ns;return;}
+     if(s.mtime_ns!==lastMtime){
+       lastMtime=s.mtime_ns;
+       if(document.activeElement===editor || editor.value!==fileBuffers[currentPath]){
+         showSyncBanner("The file changed outside DreamCoder. Review before overwriting it.","warn");
+       }
+     }
+   }catch(_){}
+ },3000);
+})();
