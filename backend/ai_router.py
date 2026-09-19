@@ -12,6 +12,8 @@ from typing import Any, Optional
 from cache import SuggestionCache
 from models import (
     BaseModel,
+    ChatContext,
+    ChatResult,
     CodeContext,
     HuggingFaceModel,
     InferenceResult,
@@ -98,6 +100,27 @@ class AIRouter:
             self.cache.put(model_name, context, result)
 
         return result
+
+    async def chat(
+        self,
+        model_name: str,
+        context: ChatContext,
+        use_cache: bool = False,
+    ) -> ChatResult:
+        """Send conversational requests to the exact selected model adapter."""
+        if context.mode == "project":
+            context.project_context = self._project_context()
+        model = self.get_model(model_name)
+        return await model.chat(context)
+
+    def _project_context(self) -> str:
+        files = self.index.list_files()
+        chunks: list[str] = []
+        for f in files[:20]:
+            full = self.index.get_file(f["path"]) or {}
+            content = (full.get("content") or "")[:1800]
+            chunks.append(f"# --- {f['path']} ---\\n{content}")
+        return "\\n\\n".join(chunks) or "(project index is empty)"
 
     async def health(self, model_name: Optional[str] = None) -> dict[str, Any]:
         info: dict[str, Any] = {
