@@ -94,15 +94,13 @@ async function loadAvailableModels() {
     localStorage.setItem("dc_model", modelSelect.value);
     await refreshModelHealth();
   } catch (err) {
-    // Keep the static selector as a visible fallback, but make its status explicit.
-    if (!modelSelect.options.length) {
-      const option = document.createElement("option");
-      option.value = "mock";
-      option.textContent = "Mock / offline";
-      modelSelect.appendChild(option);
-    }
-    modelCurrent.textContent = modelSelect.value;
+    // Never leave pretend model names selected when discovery is unavailable.
+    modelSelect.innerHTML = '<option value="mock">Mock / offline</option>';
+    modelSelect.value = "mock";
+    modelCurrent.textContent = "mock";
+    localStorage.setItem("dc_model", "mock");
     await refreshModelHealth();
+    toast("Model discovery unavailable — using explicit Mock / offline mode", "info", 4500);
   }
 }
 
