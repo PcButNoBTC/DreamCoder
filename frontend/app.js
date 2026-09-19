@@ -263,6 +263,30 @@ async function runCode() {
 }
 document.getElementById("runBtn").onclick = runCode;
 document.getElementById("agentBtn")?.addEventListener("click", runProjectAgent);
+async function syncProjectToGithub() {
+  const btn = document.getElementById("githubSyncBtn");
+  if (btn) btn.disabled = true;
+  setGithubSyncState("syncing…", "syncing");
+  try {
+    const data = await api("/api/github/sync", { method: "POST" });
+    const failed = (data.results || []).filter(r => !r.ok && !r.skipped);
+    if (failed.length) throw new Error(failed[0].error || "GitHub rejected a file");
+    if ((data.results || []).some(r => r.ok)) {
+      setGithubSyncState("synced ✓", "ready");
+      toast("Project synced to GitHub", "success");
+    } else {
+      setGithubSyncState("local only", "off");
+      toast("GitHub autosync is not configured", "info");
+    }
+  } catch (err) {
+    setGithubSyncState("sync error", "error");
+    toast("GitHub sync failed: " + err.message, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+document.getElementById("githubSyncBtn")?.addEventListener("click", syncProjectToGithub);
+
 async function runProjectAgent() {
   const goal = prompt("What should DreamCoder change in this project?", document.getElementById("projectGoal")?.value || "");
   if (!goal?.trim()) return;
