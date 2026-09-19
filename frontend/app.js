@@ -269,7 +269,7 @@ editor.addEventListener("input", () => {
   syncStatus();
   setStatus("Modified · syncing…");
   scheduleLiveSave();
-};
+});
 editor.addEventListener("click", syncStatus);
 editor.addEventListener("keyup", syncStatus);
 updateLines();
