@@ -7,7 +7,7 @@
 
 const { app, BrowserWindow, shell, dialog, ipcMain } = require("electron");
 const path = require("path");
-const { spawn } = require("child_process");
+const { spawn } = require("child_process");\nconst http = require("http");
 
 let mainWindow = null;
 let backendProc = null;
@@ -29,7 +29,7 @@ function startBackend() {
   backendProc.on("exit", (code) => console.log(`backend exited ${code}`));
 }
 
-ipcMain.handle("dreamcoder:choose-folder", async () => {\n  const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });\n  return result.canceled ? null : result.filePaths[0];\n});\n\nfunction createWindow() {
+ipcMain.handle("dreamcoder:choose-folder", async () => {\n  const result = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });\n  return result.canceled ? null : result.filePaths[0];\n});\n\nfunction waitForBackend(attempt = 0) {\n  if (attempt > 30) return createWindow();\n  const req = http.get(`http://127.0.0.1:${BACKEND_PORT}/`, (res) => {\n    res.resume();\n    createWindow();\n  });\n  req.on("error", () => setTimeout(() => waitForBackend(attempt + 1), 250));\n  req.setTimeout(250, () => req.destroy());\n}\n\nfunction createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
