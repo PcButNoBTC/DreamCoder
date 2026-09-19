@@ -1,8 +1,7 @@
-// Reserved for future secure bridge between Electron and the renderer.
-// For now the UI talks to the local FastAPI backend over HTTP/WS.
-const { contextBridge } = require("electron");
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("dreamcoderDesktop", {
   isDesktop: true,
-  platform: process.platform,\n  chooseFolder: () => require("electron").ipcRenderer.invoke("dreamcoder:choose-folder"),
+  platform: process.platform,
+  chooseFolder: () => ipcRenderer.invoke("dreamcoder:choose-folder")
 });
