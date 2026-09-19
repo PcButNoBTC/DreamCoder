@@ -8,6 +8,7 @@ import asyncio
 import difflib
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Optional
