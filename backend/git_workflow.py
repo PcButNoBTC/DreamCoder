@@ -19,3 +19,9 @@ def push(remote="origin",branch=""): return run(["push",remote,*([branch] if bra
 def stash(action="push",message=""): return run(["stash",action,*([message] if message and action=="push" else [])])
 def merge(branch): return run(["merge",branch],timeout=300)
 def conflicts(): return run(["diff","--name-only","--diff-filter=U"])
+
+def conflict_data(path):
+    current=workspace.read_file(path)
+    head=workspace.git(["show","HEAD:"+path])
+    merge_head=workspace.git(["show","MERGE_HEAD:"+path])
+    return {"path":path,"current":current,"base":head.get("stdout",""),"incoming":merge_head.get("stdout",""),"base_ok":head.get("ok",False),"incoming_ok":merge_head.get("ok",False)}
