@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "e2e": "playwright test ../e2e"
   },
   "build": {
     "appId": "dev.dreamcoder.app",
@@ -42,7 +43,9 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.0.0"
+    "electron-builder": "^25.0.0",
+    "playwright": "^1.55.0",
+    "@playwright/test": "^1.55.0"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
