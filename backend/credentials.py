@@ -14,6 +14,8 @@ def set_secret(name:str,value:str)->dict[str,Any]:
         return {"ok":False,"error":"keyring package is not installed"}
     keyring.set_password(SERVICE,name,value)
     return {"ok":True,"name":name,"stored":True}
+def get_secret(name:str)->str:
+    return keyring.get_password(SERVICE,name) if keyring else ""
 def has_secret(name:str)->bool:
     return bool(keyring and keyring.get_password(SERVICE,name))
 def delete_secret(name:str)->dict[str,Any]:
