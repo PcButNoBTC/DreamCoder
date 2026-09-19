@@ -290,7 +290,8 @@ async def workspace_checkpoint(body:dict):
 async def workspace_checkpoint_restore(body:dict):
     if not workspace.root(): raise HTTPException(400,"No workspace")
     return restore_checkpoint(str(workspace.root()),str(body.get("path","")))
-\n@app.get("/api/github/oauth/start")
+
+@app.get("/api/github/oauth/start")
 async def github_oauth_start():
     if not github_auth.configured(): raise HTTPException(503,"GitHub OAuth is not configured")
     from fastapi.responses import RedirectResponse
