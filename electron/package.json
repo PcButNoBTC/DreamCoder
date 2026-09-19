@@ -1,0 +1,24 @@
+{
+  "name": "dreamcoder",
+  "version": "1.0.0",
+  "description": "DreamCoder – AI-native personal IDE",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "dev.dreamcoder.app",
+    "productName": "DreamCoder",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "../frontend/**/*"],
+    "win": { "target": ["nsis"] },
+    "mac": { "target": ["dmg"] },
+    "linux": { "target": ["AppImage"] }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

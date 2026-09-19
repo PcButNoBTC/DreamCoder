@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DreamCoder</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">D</div>
+        <div>
+          <div class="brand-name">DreamCoder</div>
+          <div class="brand-subtitle">AI-native development studio · <a href="debug.html" style="color:var(--accent);text-decoration:none">Debug</a></div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="runBtn" class="btn primary" title="Ctrl+Enter">▶ Run</button>
+        <button id="suggestBtn" class="btn" title="Ctrl+Shift+S">✦ Suggest</button>
+        <button id="askAllBtn" class="btn" title="Ctrl+A – query all models">◈ Ask All</button>
+        <button id="streamBtn" class="btn" title="Stream completion">≋ Stream</button>
+        <button id="generateBtn" class="btn" title="Generate full multi-file project">✦ Generate</button>
+        <button id="analyzeBtn" class="btn" title="Deep folder / project analysis">◎ Analyze</button>
+        <button id="evolveBtn" class="btn evolve" title="Ask AI to improve the app">✧ Evolve</button>
+        <select id="modelSelect" class="select">
+          <optgroup label="Code-specialized">
+            <option value="Qwen2.5-Coder">Qwen2.5-Coder</option>
+            <option value="StarCoder2">StarCoder2</option>
+            <option value="DeepSeek-Coder">DeepSeek-Coder</option>
+            <option value="CodeLlama-34B">CodeLlama-34B</option>
+          </optgroup>
+          <optgroup label="Open / general (less restricted)">
+            <option value="Llama-3.1-8B-Instruct" selected>Llama-3.1-8B-Instruct</option>
+            <option value="Llama-3.1-70B-Instruct">Llama-3.1-70B-Instruct</option>
+            <option value="Mistral-7B-Instruct">Mistral-7B-Instruct</option>
+            <option value="Mixtral-8x7B">Mixtral-8x7B</option>
+            <option value="Yi-34B-Chat">Yi-34B-Chat</option>
+            <option value="Dolphin-Llama3">Dolphin-Llama3 (uncensored)</option>
+            <option value="WizardLM-2">WizardLM-2</option>
+          </optgroup>
+          <optgroup label="Local">
+            <option value="Local Model">Local Model (Ollama / HF)</option>
+            <option value="Ollama">Ollama (any pulled model)</option>
+          </optgroup>
+        </select>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="files" id="explorerPanel">
+        <div class="panel-title">EXPLORER</div>
+        <div class="project-tabs" id="projectTabs"></div>
+        <div class="project-name" id="projectNameLabel">◈ dreamcoder-app</div>
+        <div id="dropZone" class="drop-zone">
+          <div class="drop-zone-inner">
+            <div>📁 Drop a folder or files here</div>
+            <div class="muted" style="margin-top:4px">or click to browse</div>
+          </div>
+          <input type="file" id="folderInput" webkitdirectory directory multiple hidden />
+          <input type="file" id="filesInput" multiple hidden />
+        </div>
+        <div class="explorer-actions">
+          <button class="chip" id="browseFolderBtn" type="button">Open folder</button>
+          <button class="chip" id="browseFilesBtn" type="button">Add files</button>
+        </div>
+        <div id="fileTree">
+          <button class="file active">▾ src</button>
+          <button class="file indent active-file" data-path="src/main.py">◇ main.py</button>
+          <button class="file indent" data-path="src/ai_router.py">◇ ai_router.py</button>
+          <button class="file indent" data-path="src/suggestions.py">◇ suggestions.py</button>
+          <button class="file indent" data-path="src/cache.py">◇ cache.py</button>
+          <button class="file">▾ tests</button>
+          <button class="file indent" data-path="tests/test_main.py">◇ test_main.py</button>
+          <button class="file" data-path="requirements.txt">◇ requirements.txt</button>
+        </div>
+      </aside>
+
+      <section class="editor-area">
+        <div class="tabs" id="editorTabs">
+          <div class="tab active" data-tab-path="src/main.py">main.py <span class="tab-close" title="Close">×</span></div>
+          <button type="button" class="tab tab-add" id="tabAdd" title="New tab">+</button>
+        </div>
+        <div class="editor-wrap">
+          <div class="line-numbers" id="lineNumbers"></div>
+          <textarea id="editor" spellcheck="false">from dataclasses import dataclass
+from typing import Any
+
+@dataclass
+class CodeContext:
+    code: str
+    language: str = "python"
+    selection: str = ""
+
+class DreamCoder:
+    def __init__(self, model):
+        self.model = model
+
+    async def suggest(self, context: CodeContext) -> list[str]:
+        # Ask the model for focused, actionable improvements.
+        return await self.model.complete(context)
+
+if __name__ == "__main__":
+    app = DreamCoder(model="Llama-3.1-8B-Instruct")
+    print("DreamCoder ready")</textarea>
+        </div>
+        <div class="statusbar">
+          <span>Ln 1, Col 1</span>
+          <span>Python</span>
+          <span>UTF-8</span>
+          <span id="status">Ready</span>
+        </div>
+        <div class="terminal" id="terminalPanel">
+          <div class="terminal-head">TERMINAL · local shell <span id="termClear">×</span></div>
+          <pre id="terminalOutput">$ DreamCoder local terminal
+Type a command and press Enter (runs on the machine hosting the backend).
+</pre>
+          <div class="term-input-row">
+            <span class="term-prompt" id="termPrompt">$</span>
+            <input id="termInput" class="term-input" type="text" spellcheck="false" autocomplete="off" placeholder="dir · ls · python --version · npm · git status …" />
+          </div>
+        </div>
+      </section>
+
+      <aside class="ai-panel">
+        <div class="ai-header">
+          <div>
+            <div class="ai-title">AI Assistant</div>
+            <div class="ai-subtitle">Live project intelligence</div>
+          </div>
+          <span class="live-dot" id="liveDot">LIVE</span>
+        </div>
+        <div class="ai-subtabs" id="aiSubTabs">
+          <button type="button" class="ai-subtab active" data-panel="panel-chat">Chat</button>
+          <button type="button" class="ai-subtab" data-panel="panel-evolve">Evolve</button>
+          <button type="button" class="ai-subtab" data-panel="panel-generate">Generate</button>
+          <button type="button" class="ai-subtab" data-panel="panel-heal">Heal</button>
+          <button type="button" class="ai-subtab" data-panel="panel-vision">Vision</button>
+          <button type="button" class="ai-subtab" data-panel="panel-models">Models</button>
+        </div>
+
+        <!-- Project context / goal / commands -->
+        <section class="card" id="projectContextCard" data-ai-panel="panel-chat" class="card ai-panel-show">
+          <div class="card-head"><span>🎯 Project Context</span><span class="badge">GUIDES AI</span></div>
+          <textarea id="projectGoal" class="evolve-input" rows="2" placeholder="What is this project for? e.g. Personal AI IDE with multi-model coding…"></textarea>
+          <input id="projectCmd" class="evolve-input" style="margin-top:6px;min-height:28px;max-height:28px" placeholder="Default run command (optional) e.g. python main.py" />
+          <div class="patch-actions" style="margin-top:6px">
+            <button class="apply" id="saveContextBtn" style="flex:1">Save context</button>
+          </div>
+        </section>
+
+        <!-- Live monitor chat -->
+        <section class="card" id="monitorCard" data-ai-panel="panel-chat" class="card ai-panel-show">
+          <div class="card-head">
+            <span>💬 Chat</span>
+            <span class="badge" id="monitorBadge">PROJECT + GENERAL</span>
+          </div>
+          <div class="chat-mode-row">
+            <button class="chip active-theme" id="modeProject" type="button" title="Answers use your indexed files + goal">Project</button>
+            <button class="chip" id="modeGeneral" type="button" title="Free chat — any topic, not limited to this repo">General</button>
+          </div>
+          <div id="monitorInsights" class="muted" style="margin-bottom:6px">Loading project pulse…</div>
+          <div id="chatLog" class="chat-log"></div>
+          <div class="evolve-input-row" style="margin-top:6px">
+            <textarea id="chatInput" class="evolve-input" rows="2" placeholder="Ask anything — about this project or general topics…"></textarea>
+            <button id="chatSend" class="btn primary" style="height:auto;padding:8px 12px">Ask</button>
+          </div>
+          <div class="evolve-chips" id="chatChips" style="margin-top:6px">
+            <button class="chip" data-chat="What is this project about?">About project</button>
+            <button class="chip" data-chat="Give me ideas to improve this codebase">Ideas</button>
+            <button class="chip" data-chat="Analyze the folder and suggest improvements">Analyze</button>
+            <button class="chip" data-chat="What should I work on next?">Next steps</button>
+            <button class="chip" data-chat="Explain async/await in Python simply">General: async</button>
+            <button class="chip" data-chat="How do I structure a clean Python package?">General: structure</button>
+          </div>
+        </section>
+
+        <!-- Folder analysis results -->
+        <section class="ai-panel-show card" id="analysisCard" data-ai-panel="panel-chat" style="display:none">
+          <div class="card-head"><span>◎ Folder Analysis</span><span id="analysisHealth">—</span></div>
+          <div id="analysisSummary" class="muted"></div>
+          <div id="analysisBody"></div>
+        </section>
+
+        <!-- Vision / image analysis -->
+        <section class="card" id="visionCard" data-ai-panel="panel-vision">
+          <div class="card-head"><span>🖼 Image analysis</span><span class="badge">VISION</span></div>
+          <div class="muted" style="margin-bottom:6px">Drop a screenshot or paste (Ctrl+V) — analyze UI, errors, diagrams like a copilot.</div>
+          <div id="visionDrop" class="drop-zone" style="margin:0 0 6px 0">
+            <div class="drop-zone-inner">Drop image / click to upload</div>
+            <input type="file" id="visionFile" accept="image/*" hidden />
+          </div>
+          <div id="visionPreview" style="display:none;margin-bottom:6px">
+            <img id="visionImg" alt="preview" style="max-width:100%;border-radius:6px;border:1px solid var(--border)" />
+          </div>
+          <textarea id="visionPrompt" class="evolve-input" rows="2" placeholder="Optional: what should I look for? e.g. explain this error, improve this UI…"></textarea>
+          <div class="patch-actions" style="margin-top:6px">
+            <button class="apply" id="visionAnalyzeBtn" style="flex:1">Analyze image</button>
+          </div>
+          <div id="visionResult" class="muted" style="margin-top:6px"></div>
+        </section>
+
+        <!-- Generate full projects -->
+        <section class="card" id="generateCard" data-ai-panel="panel-generate">
+          <div class="card-head"><span>✦ Generate Project</span><span class="badge">ANY LANGUAGE</span></div>
+          <div class="muted" style="margin-bottom:6px">Describe an app — AI scaffolds all files (Python, C/C++, TS, C#, Rust…). Then load or download zip.</div>
+          <textarea id="generatePrompt" class="evolve-input" rows="3" placeholder="e.g. C++ desktop app with forms like Visual Studio that tracks tasks&#10;e.g. Python FastAPI todo API with tests&#10;e.g. Recreate this IDE as a downloadable zip"></textarea>
+          <div class="patch-actions" style="margin-top:6px">
+            <button class="apply" id="generateGoBtn" style="flex:1">Generate</button>
+            <button class="dismiss" id="generateZipBtn" style="flex:1">Download zip</button>
+          </div>
+          <div id="generatePages" class="muted" style="margin-top:8px"></div>
+          <div id="generateFiles" class="hf-list" style="margin-top:6px"></div>
+          <div class="patch-actions" style="margin-top:6px;display:none" id="generateApplyRow">
+            <button class="apply" id="generateApplyBtn" style="flex:1">Load into workspace</button>
+          </div>
+        </section>
+
+        <section class="card" id="healCard" data-ai-panel="panel-heal">
+          <div class="card-head"><span>🩹 Self-Heal</span><span class="badge">AUTO-FIX</span></div>
+          <div class="muted" style="margin-bottom:6px">Paste a build/run error — AI explains why and proposes file fixes.</div>
+          <textarea id="healError" class="evolve-input" rows="3" placeholder="Paste error output here…"></textarea>
+          <div class="patch-actions" style="margin-top:6px">
+            <button class="apply" id="healBtn" style="flex:1">Heal</button>
+          </div>
+          <div id="healResult" class="muted" style="margin-top:6px"></div>
+        </section>
+
+        <!-- Evolve: AI can update the app itself -->
+        <section class="card evolve-card" id="evolveCard" data-ai-panel="panel-evolve">
+          <div class="card-head">
+            <span>✧ Evolve App</span>
+            <span class="badge">SELF-UPDATE</span>
+          </div>
+          <div class="muted" style="margin-bottom:6px">Describe a UI or feature change. AI proposes patches you can apply live.</div>
+          <div class="evolve-chips" id="evolveChips">
+            <button class="chip" data-prompt="Add a keyboard shortcut help overlay">Shortcut help</button>
+            <button class="chip" data-prompt="Add a minimap-style overview next to the editor">Editor minimap</button>
+            <button class="chip" data-prompt="Add dark/light theme toggle with smoother transitions">Theme polish</button>
+            <button class="chip" data-prompt="Add a collapsible terminal with larger font">Better terminal</button>
+            <button class="chip" data-prompt="Add file tree expand/collapse and icons">File tree UX</button>
+          </div>
+          <div class="evolve-input-row">
+            <textarea id="evolveInput" class="evolve-input" placeholder="e.g. Add a floating command palette (Ctrl+K)…" rows="2"></textarea>
+            <button id="evolveSend" class="btn evolve" style="height:auto;padding:8px 12px">Go</button>
+          </div>
+          <div id="patchList"></div>
+        </section>
+
+        <section class="card" data-ai-panel="panel-models">
+          <div class="card-head"><span>Model</span><span class="badge">LOCAL / OPEN</span></div>
+          <div class="model-current" id="modelCurrent">Llama-3.1-8B-Instruct</div>
+          <div class="muted">Open, less-restricted instruction model</div>
+        </section>
+
+        <section class="card" id="hfCard" data-ai-panel="panel-models">
+          <div class="card-head">
+            <span>🤗 Hugging Face</span>
+            <span class="badge">OPEN CATALOG</span>
+          </div>
+          <div class="evolve-input-row" style="margin-bottom:6px">
+            <input id="hfSearch" class="evolve-input" style="min-height:28px;max-height:28px" placeholder="Search HF models e.g. llama code…" />
+            <button id="hfRefresh" class="btn" style="height:28px;padding:0 10px" title="Refresh from Hugging Face">↻</button>
+          </div>
+          <div id="hfCategories" class="evolve-chips" style="margin-bottom:6px"></div>
+          <div id="hfModelList" class="hf-list muted">Loading open models…</div>
+        </section>
+
+        <section class="card" id="suggestionsCard" data-ai-panel="panel-chat" class="card ai-panel-show">
+          <div class="card-head"><span>Code Suggestions</span><span id="sugCount">0</span></div>
+          <div class="muted" id="sugEmpty">Click ✦ Suggest or press Ctrl+Shift+S</div>
+        </section>
+
+        <section class="card" id="insightsCard" data-ai-panel="panel-chat" class="card ai-panel-show">
+          <div class="card-head"><span>App Structure</span><span id="insCount">0</span></div>
+        </section>
+
+        <section class="card" id="healthCard" data-ai-panel="panel-chat" class="card ai-panel-show">
+          <div class="card-head"><span>Project Health</span><span class="health" id="healthScore">—</span></div>
+          <div class="progress"><div id="healthBar" style="width:0%"></div></div>
+          <div class="health-grid" id="healthGrid">
+            <span>— files</span><span>— symbols</span>
+            <span>— latency</span><span>— cache</span>
+          </div>
+        </section>
+
+        <section class="card compact" data-ai-panel="panel-models">
+          <div class="card-head"><span>UI Theme</span><span>✦</span></div>
+          <div class="theme-row" style="flex-wrap:wrap">
+            <button class="theme active-theme" data-theme="midnight">Midnight</button>
+            <button class="theme" data-theme="graphite">Graphite</button>
+            <button class="theme" data-theme="violet">Violet</button>
+            <button class="theme" data-theme="peach">Peach</button>
+            <button class="theme" data-theme="shroom">Shroom</button>
+            <button class="theme" data-theme="ocean">Ocean</button>
+            <button class="theme" data-theme="ember">Ember</button>
+          </div>
+          <div class="theme-row" style="margin-top:6px">
+            <button class="theme" id="fxCursor" type="button">Cursor FX</button>
+            <button class="theme" id="fxParticles" type="button">Particles</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <div id="commandPalette" class="cmd-palette" style="display:none">
+    <input id="cmdInput" class="cmd-input" placeholder="Type a command… (theme peach, particles on, analyze, generate…)" />
+    <div id="cmdResults" class="cmd-results"></div>
+  </div>
+  <div id="refreshOverlay"><div class="refresh-pill"><div class="refresh-spinner"></div><span id="refreshText">Updating…</span></div></div>
+  <div id="toasts"></div>
+  <div id="modalRoot"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

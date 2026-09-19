@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DreamCoder Debug</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body{padding:20px;max-width:1100px;margin:0 auto;overflow:auto}
+    h1{font-size:18px;margin:0 0 4px}
+    .sub{color:var(--muted);font-size:12px;margin-bottom:18px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:800px){.grid{grid-template-columns:1fr}}
+    .card{margin-bottom:0}
+    pre.debug-pre{
+      margin:0;padding:10px;background:#0a0d12;border-radius:8px;
+      font:11px/1.45 ui-monospace,monospace;white-space:pre-wrap;max-height:280px;overflow:auto;
+      color:#c5d0e0;
+    }
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+    .pill{font-size:10px;padding:3px 8px;border-radius:10px;border:1px solid var(--border)}
+    .pill.ok{border-color:#4de0b855;color:var(--accent2)}
+    .pill.bad{border-color:#ff6b7a66;color:var(--danger)}
+    a.back{color:var(--accent);text-decoration:none;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="row">
+    <a class="back" href="index.html">← Back to IDE</a>
+    <button class="btn primary" id="refreshBtn">↻ Refresh all</button>
+    <button class="btn" id="clearLogBtn">Clear client log</button>
+  </div>
+  <h1>DreamCoder Debug</h1>
+  <div class="sub">Live diagnostics for API, index, models, and client state</div>
+  <div class="row" id="statusPills"></div>
+  <div class="grid">
+    <section class="card">
+      <div class="card-head"><span>API Health</span><span id="healthAge">—</span></div>
+      <pre class="debug-pre" id="healthPre">Loading…</pre>
+    </section>
+    <section class="card">
+      <div class="card-head"><span>Index / SQLite</span></div>
+      <pre class="debug-pre" id="indexPre">Loading…</pre>
+    </section>
+    <section class="card">
+      <div class="card-head"><span>Project context</span></div>
+      <pre class="debug-pre" id="ctxPre">Loading…</pre>
+    </section>
+    <section class="card">
+      <div class="card-head"><span>HF catalog sample</span></div>
+      <pre class="debug-pre" id="hfPre">Loading…</pre>
+    </section>
+    <section class="card">
+      <div class="card-head"><span>History (recent)</span></div>
+      <pre class="debug-pre" id="histPre">Loading…</pre>
+    </section>
+    <section class="card">
+      <div class="card-head"><span>Client log</span></div>
+      <pre class="debug-pre" id="clientPre">(empty)</pre>
+    </section>
+  </div>
+  <script>
+    const API = window.DREAMCODER_API || "http://localhost:8000";
+    const clientLog = [];
+    function log(msg) {
+      clientLog.unshift(`[${new Date().toLocaleTimeString()}] ${msg}`);
+      if (clientLog.length > 80) clientLog.pop();
+      document.getElementById("clientPre").textContent = clientLog.join("\n");
+    }
+    async function get(path) {
+      const r = await fetch(API + path);
+      if (!r.ok) throw new Error(r.status + " " + path);
+      return r.json();
+    }
+    function pills(items) {
+      document.getElementById("statusPills").innerHTML = items
+        .map(([ok, t]) => `<span class="pill ${ok ? "ok" : "bad"}">${t}</span>`)
+        .join("");
+    }
+    async function refresh() {
+      log("Refresh started");
+      const results = [];
+      try {
+        const h = await get("/api/health");
+        document.getElementById("healthPre").textContent = JSON.stringify(h, null, 2);
+        document.getElementById("healthAge").textContent = "ok";
+        results.push([true, "API online"]);
+        results.push([true, `DB: ${h.db?.stats?.files ?? "?"} files`]);
+      } catch (e) {
+        document.getElementById("healthPre").textContent = String(e);
+        results.push([false, "API offline"]);
+      }
+      try {
+        const s = await get("/api/index/stats");
+        const f = await get("/api/files");
+        document.getElementById("indexPre").textContent = JSON.stringify({ stats: s, files: f.files }, null, 2);
+        results.push([true, `Index ${s.symbols || 0} symbols`]);
+      } catch (e) {
+        document.getElementById("indexPre").textContent = String(e);
+      }
+      try {
+        const c = await get("/api/project/context");
+        document.getElementById("ctxPre").textContent = JSON.stringify(c, null, 2);
+      } catch (e) {
+        document.getElementById("ctxPre").textContent = String(e);
+      }
+      try {
+        const hf = await get("/api/models/huggingface");
+        const sample = (hf.models || []).slice(0, 8).map((m) => m.id);
+        document.getElementById("hfPre").textContent = JSON.stringify({
+          total: hf.total || (hf.models || []).length,
+          cached: hf.cached,
+          categories: Object.keys(hf.organized || {}),
+          sample,
+        }, null, 2);
+        results.push([true, `HF ${(hf.total || hf.models?.length || 0)} models`]);
+      } catch (e) {
+        document.getElementById("hfPre").textContent = String(e);
+      }
+      try {
+        const hist = await get("/api/history?limit=15");
+        document.getElementById("histPre").textContent = JSON.stringify(hist.history || hist, null, 2);
+      } catch (e) {
+        document.getElementById("histPre").textContent = String(e);
+      }
+      pills(results);
+      log("Refresh complete");
+    }
+    document.getElementById("refreshBtn").onclick = refresh;
+    document.getElementById("clearLogBtn").onclick = () => {
+      clientLog.length = 0;
+      document.getElementById("clientPre").textContent = "(empty)";
+    };
+    refresh();
+    setInterval(refresh, 15000);
+  </script>
+</body>
+</html>
