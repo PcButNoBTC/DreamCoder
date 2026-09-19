@@ -4,5 +4,5 @@ const { contextBridge } = require("electron");
 
 contextBridge.exposeInMainWorld("dreamcoderDesktop", {
   isDesktop: true,
-  platform: process.platform,
+  platform: process.platform,\n  chooseFolder: () => require("electron").ipcRenderer.invoke("dreamcoder:choose-folder"),
 });
