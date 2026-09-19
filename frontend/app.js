@@ -175,6 +175,26 @@ function setGithubSyncState(label, state = "") {
   el.dataset.state = state;
 }
 
+async function refreshWorkspaceGitStatus() {
+  const el = document.getElementById("workspaceGitState");
+  if (!el) return;
+  try {
+    const data = await api("/api/workspace");
+    if (!data.configured) {
+      el.textContent = "Git: no workspace";
+      return;
+    }
+    const branch = data.branch || "detached";
+    const lines = (data.status?.stdout || "").split("\n").filter(Boolean);
+    const dirty = lines.filter(x => !x.startsWith("##")).length;
+    el.textContent = `Git: ${branch}${dirty ? " · " + dirty + " changed" : " · clean"}`;
+    el.dataset.state = dirty ? "dirty" : "clean";
+  } catch (_) {
+    el.textContent = "Git: offline";
+    el.dataset.state = "error";
+  }
+}
+
 async function refreshGithubSyncStatus() {
   try {
     const data = await api("/api/github/status");
@@ -1160,6 +1180,8 @@ if (analyzeBtn) analyzeBtn.onclick = runFolderAnalysis;
 /* boot extras */
 loadProjectContext();
 refreshGithubSyncStatus();
+refreshWorkspaceGitStatus();
+setInterval(refreshWorkspaceGitStatus, 5000);
 refreshMonitor();
 setInterval(refreshMonitor, 45000); // keep monitor fresh
 
