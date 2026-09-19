@@ -2,7 +2,8 @@
 from __future__ import annotations
 import hashlib,hmac,os,secrets,time
 from urllib.parse import urlencode
-import httpx\nimport jwt
+import httpx
+import jwt
 import db
 from credentials import set_secret,get_secret,delete_secret,available
 def _cfg():
