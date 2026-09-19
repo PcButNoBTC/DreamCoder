@@ -677,6 +677,9 @@ async def start_watch(req: WatchRequest):
     if _watcher:
         _watcher.stop()
 
+    # A native workspace replaces the previous project snapshot.
+    router.index.clear()
+
     def on_change(rel: str, content: str, language: str):
         if language == "deleted" or content == "":
             router.index.remove_file(rel)
