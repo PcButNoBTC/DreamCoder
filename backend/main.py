@@ -34,6 +34,7 @@ from checkpoints import list_checkpoints, create as create_checkpoint, restore a
 from security import capabilities
 from credentials import status as credential_status
 import github_auth, git_workflow
+from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
 from editor_recovery import three_way_merge
 
@@ -277,6 +278,25 @@ async def github_select_repository(body:dict):
     github_sync.repo=repo
     if body.get("branch"): db.set_setting("github_branch",body["branch"]); os.environ["DREAMCODER_GITHUB_BRANCH"]=body["branch"]; github_sync.branch=body["branch"]
     return github_sync.status()
+
+@app.get("/api/git/workflow/files")
+async def git_workflow_files(): return changed_files()
+
+@app.post("/api/git/workflow/agent-branch")
+async def git_agent_branch(body:dict):
+    name=body.get("name","agent/"+time.strftime("%Y%m%d-%H%M%S"))
+    return git_workflow.create_branch(name,True)
+
+@app.post("/api/git/workflow/agent-pr")
+async def git_agent_pr(body:dict):
+    branch=body.get("branch","")
+    if not branch: raise HTTPException(400,"branch required")
+    push=git_workflow.push(body.get("remote","origin"),branch)
+    if not push.get("ok"): return {"ok":False,"push":push}
+    repo=github_sync.repo
+    if not repo: raise HTTPException(400,"GitHub repository not configured")
+    pr=await create_agent_pr(repo,branch,body.get("title","DreamCoder Agent changes"),body.get("body",""))
+    return {"ok":pr.get("ok",False),"push":push,"pr":pr}
 
 @app.get("/api/git/workflow/status")
 async def git_workflow_status(): return git_workflow.status()
