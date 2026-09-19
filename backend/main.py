@@ -530,11 +530,14 @@ class BulkFile(BaseModel):
 class BulkIndexRequest(BaseModel):
     files: list[BulkFile]
     root_name: str = "dropped-project"
+    replace_existing: bool = False
 
 
 @app.post("/api/files/bulk")
 async def bulk_index(req: BulkIndexRequest):
-    """Index many files at once (drag-drop folder)."""
+    """Index files; folder opens replace the active index, while Add Files can merge."""
+    if req.replace_existing:
+        router.index.clear()
     count = 0
     for f in req.files:
         lang = f.language or "python"
