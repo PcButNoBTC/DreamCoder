@@ -44,7 +44,7 @@ class ToolRegistry:
         if not self.auto_apply: raise PermissionError("write_file requires approval")
         p=self._path(path); p.parent.mkdir(parents=True,exist_ok=True); before=p.read_text(encoding="utf-8") if p.exists() else ""
         p.write_text(content,encoding="utf-8")
-        return {"path":str(p.relative_to(self.root)),"created":not bool(before),"diff":"".join(difflib.unified_diff(before.splitlines(True),content.splitlines(True),fromfile=str(p),tofile=str(p)))}
+        return {"path":str(p.relative_to(self.root)),"created":not bool(before),"change_type":"APP_MODIFY","diff":"".join(difflib.unified_diff(before.splitlines(True),content.splitlines(True),fromfile=str(p),tofile=str(p)))}
 
     def apply_patch(self, path: str, old: str, new: str) -> dict[str, Any]:
         if not self.auto_apply: raise PermissionError("apply_patch requires approval")
@@ -53,13 +53,44 @@ class ToolRegistry:
         if old not in current: raise ValueError(f"Patch anchor not found in {path}")
         updated=current.replace(old,new,1)
         p.write_text(updated,encoding="utf-8")
-        return {"path":path,"diff":"".join(difflib.unified_diff(current.splitlines(True),updated.splitlines(True),fromfile=path,tofile=path))}
+        return {"path":path,"change_type":"APP_MODIFY","diff":"".join(difflib.unified_diff(current.splitlines(True),updated.splitlines(True),fromfile=path,tofile=path))}
 
     def run(self, command: str) -> dict[str, Any]:
-        if not command_allowed(command): raise PermissionError("Command is not in the safe executable allowlist")
-        started=time.perf_counter()
-        p=subprocess.run(command,cwd=self.root,shell=True,capture_output=True,text=True,timeout=self.timeout,env=os.environ.copy())
-        return {"ok":p.returncode==0,"command":command,"exit_code":p.returncode,"stdout":p.stdout[-12000:],"stderr":p.stderr[-12000:],"latency_ms":int((time.perf_counter()-started)*1000)}
+        from .permissions import split_segments, unrestricted_mode
+        segments = split_segments(command)
+        started = time.perf_counter()
+        outputs = []
+        overall_ok = True
+        if unrestricted_mode():
+            argv, _ = segments[0]
+            p = subprocess.run(argv, cwd=self.root, shell=True, capture_output=True, text=True,
+                               timeout=self.timeout, env=os.environ.copy())
+            outputs.append({"command": argv, "exit_code": p.returncode,
+                            "stdout": p.stdout[-12000:], "stderr": p.stderr[-12000:]})
+            overall_ok = p.returncode == 0
+        else:
+            short_circuit = False
+            for argv, op in segments:
+                if short_circuit:
+                    outputs.append({"command": " ".join(argv), "skipped": True})
+                    continue
+                p = subprocess.run(argv, cwd=self.root, shell=False, capture_output=True, text=True,
+                                   timeout=self.timeout, env=os.environ.copy())
+                outputs.append({"command": " ".join(argv), "exit_code": p.returncode,
+                                "stdout": p.stdout[-12000:], "stderr": p.stderr[-12000:]})
+                if op == "and" and p.returncode != 0:
+                    overall_ok = False
+                    short_circuit = True
+                elif op == "or" and p.returncode == 0:
+                    short_circuit = True
+        latency = int((time.perf_counter() - started) * 1000)
+        try:
+            from backup_manager import log_command
+            log_command(command, self.root, 0 if overall_ok else 1)
+        except Exception:
+            pass
+        return {"ok": overall_ok, "command": command, "segments": outputs,
+                "latency_ms": latency, "unrestricted": unrestricted_mode()}
 
     def test(self, command: str = "") -> dict[str, Any]:
         configured = db.get_setting("project_commands", []) or []
