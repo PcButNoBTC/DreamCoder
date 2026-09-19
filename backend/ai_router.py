@@ -129,6 +129,17 @@ class AIRouter:
 
         return result
 
+    async def recommend(self, model_name: str, prompt: str, expected_format: str = "json") -> dict[str, Any]:
+        from model_race import race, build_lanes_from_env
+        lanes=build_lanes_from_env()
+        if not lanes:
+            return {"ok":False,"error":"No model lanes configured","content":""}
+        ctx=ChatContext(message=prompt,mode="analysis")
+        result=await race(lanes,ctx,expected_format=expected_format,min_responses=1)
+        if not result.winner:
+            return {"ok":False,"error":"No usable response from any lane","losers":[{"lane":l.lane.name,"reason":l.reason} for l in result.losers],"content":""}
+        return {"ok":True,"content":result.winner.content,"winning_lane":result.winner.lane.name,"model":result.winner.lane.model,"duration_ms":result.duration_ms,"losers":[{"lane":l.lane.name,"reason":l.reason} for l in result.losers]}
+
     async def chat(
         self,
         model_name: str,
