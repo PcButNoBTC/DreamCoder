@@ -175,3 +175,20 @@ Respond ONLY with the JSON array, no markdown fences.
                 confidence=0.5,
             )
         ]
+
+
+    async def stream_chat(self, context: ChatContext):
+        import json
+        system="You are the DreamCoder coding assistant. Answer directly and never claim tool execution that did not happen."
+        if context.project_context: system+="\nProject context:\n"+context.project_context
+        history="\n".join(f"{m.get('role','user')}: {m.get('content','')}" for m in context.history[-8:])
+        prompt=system+("\nConversation:\n"+history if history else "")+"\nuser: "+context.message+"\nassistant:"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream("POST",f"{self.base_url}/api/generate",json={"model":self.model_name,"prompt":prompt,"stream":True,"options":{"temperature":0.3,"num_predict":1200}}) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line: continue
+                    data=json.loads(line)
+                    if data.get("response"): yield data["response"]
+                    if data.get("done"):
+                        yield ""
