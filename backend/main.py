@@ -38,6 +38,7 @@ import github_auth, git_workflow
 from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
 from sandbox import run as sandbox_run, available as sandbox_available
+from provider_runtime import runtime as provider_runtime
 from editor_recovery import three_way_merge
 
 # ---------------------------------------------------------------------------
@@ -953,6 +954,9 @@ async def github_oauth_disconnect(): return github_auth.disconnect()
 @app.get("/api/github/remote")
 async def github_remote():
     return await github_sync.remote_head()
+
+@app.get("/api/ai/providers/runtime")
+async def ai_provider_runtime(): return {"stats":provider_runtime.snapshot(),"ranking":provider_runtime.rank()}
 
 @app.get("/api/ai/providers/status")
 async def ai_provider_status():
