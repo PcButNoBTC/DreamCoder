@@ -37,6 +37,7 @@ from credentials import status as credential_status, get_secret as get_credentia
 import github_auth, git_workflow
 from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
+from sandbox import run as sandbox_run, available as sandbox_available
 from editor_recovery import three_way_merge
 
 # ---------------------------------------------------------------------------
