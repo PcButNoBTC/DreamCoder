@@ -650,16 +650,13 @@ async function askAllModels() {
   setStatus("Asking all models…");
   setTerminal("$ dreamcoder ask-all\n\nFiring parallel requests…");
   try {
+    const catalog = await api("/api/models");
+    const discovered = (catalog.models || []).filter(m => m.real).map(m => m.id).slice(0, 5);
+    const models = discovered.length ? discovered : ["mock"];
     const data = await api("/api/ai/suggest-all", {
       method: "POST",
       body: JSON.stringify({
-        models: [
-          "Llama-3.1-8B-Instruct",
-          "Qwen2.5-Coder",
-          "DeepSeek-Coder",
-          "Mistral-7B-Instruct",
-          "Dolphin-Llama3",
-        ],
+        models,
         code: editor.value,
         language: "python",
         filename: currentPath,
