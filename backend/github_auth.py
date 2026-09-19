@@ -4,6 +4,7 @@ import hashlib,hmac,os,secrets,time
 from urllib.parse import urlencode
 import httpx
 import db
+from credentials import set_secret,get_secret,delete_secret,available
 def _cfg():
     return {"client_id":os.getenv("DREAMCODER_GITHUB_CLIENT_ID",""),"client_secret":os.getenv("DREAMCODER_GITHUB_CLIENT_SECRET",""),"callback":os.getenv("DREAMCODER_GITHUB_CALLBACK","http://127.0.0.1:8000/api/github/oauth/callback"),"secret":os.getenv("DREAMCODER_OAUTH_STATE_SECRET","")}
 def configured(): c=_cfg(); return bool(c["client_id"] and c["client_secret"] and c["secret"])
@@ -24,10 +25,10 @@ async def exchange(code):
     async with httpx.AsyncClient(timeout=20) as client:
         r=await client.post("https://github.com/login/oauth/access_token",data={"client_id":c["client_id"],"client_secret":c["client_secret"],"code":code},headers={"Accept":"application/json"}); r.raise_for_status(); d=r.json()
     if "access_token" not in d: raise RuntimeError(d.get("error_description") or "GitHub OAuth failed")
-    db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800)))); db.set_setting("github_oauth_refresh_token",d.get("refresh_token","")); db.set_setting("github_oauth_refresh_expires_at",str(time.time()+int(d.get("refresh_token_expires_in",15897600))))
+    db.set_setting("github_oauth_token",""); set_secret("github_oauth_token",d["access_token"]) if available() else db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800)))); db.set_setting("github_oauth_refresh_token",d.get("refresh_token","")); db.set_setting("github_oauth_refresh_expires_at",str(time.time()+int(d.get("refresh_token_expires_in",15897600))))
     os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
 async def user():
-    token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    token=(get_secret("github_oauth_token") if available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
     if not token:return {"ok":False,"connected":False}
     async with httpx.AsyncClient(timeout=20) as c:
         r=await c.get("https://api.github.com/user",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"}); r.raise_for_status(); d=r.json()
@@ -47,7 +48,7 @@ async def repositories(installation_id=None):
     arr=d.get("repositories",d if isinstance(d,list) else [])
     return {"ok":True,"repositories":[{"full_name":x.get("full_name"),"private":x.get("private"),"default_branch":x.get("default_branch")} for x in arr]}
 def disconnect():
-    db.set_setting("github_oauth_token",""); db.set_setting("github_oauth_expires_at",""); os.environ.pop("GITHUB_TOKEN",None); return {"ok":True,"connected":False}
+    delete_secret("github_oauth_token") if available() else db.set_setting("github_oauth_token",""); db.set_setting("github_oauth_expires_at",""); os.environ.pop("GITHUB_TOKEN",None); return {"ok":True,"connected":False}
 
 async def refresh():
     c=_cfg(); token=db.get_setting("github_oauth_refresh_token","")
