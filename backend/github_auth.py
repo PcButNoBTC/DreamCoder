@@ -26,10 +26,16 @@ async def exchange(code):
     async with httpx.AsyncClient(timeout=20) as client:
         r=await client.post("https://github.com/login/oauth/access_token",data={"client_id":c["client_id"],"client_secret":c["client_secret"],"code":code},headers={"Accept":"application/json"}); r.raise_for_status(); d=r.json()
     if "access_token" not in d: raise RuntimeError(d.get("error_description") or "GitHub OAuth failed")
-    db.set_setting("github_oauth_token",""); set_secret("github_oauth_token",d["access_token"]) if available() else set_secret("github_oauth_token",d["access_token"]) if available() else db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800)))); (set_secret("github_oauth_refresh_token",d.get("refresh_token","")) if available() and d.get("refresh_token") else None); db.set_setting("github_oauth_refresh_token","" if available() else d.get("refresh_token","")); db.set_setting("github_oauth_refresh_expires_at",str(time.time()+int(d.get("refresh_token_expires_in",15897600))))
+    if not available():
+        raise RuntimeError("OS keychain is required for GitHub OAuth token storage")
+    set_secret("github_oauth_token", d["access_token"])
+    if d.get("refresh_token"):
+        set_secret("github_oauth_refresh_token", d["refresh_token"])
+    db.set_setting("github_oauth_expires_at", str(time.time() + int(d.get("expires_in", 28800))))
+    db.set_setting("github_oauth_refresh_expires_at", str(time.time() + int(d.get("refresh_token_expires_in", 15897600))))
     os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
 async def user():
-    token=(get_secret("github_oauth_token") if available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    token=get_secret("github_oauth_token") if available() else os.getenv("GITHUB_TOKEN","")
     if not token:return {"ok":False,"connected":False}
     async with httpx.AsyncClient(timeout=20) as c:
         r=await c.get("https://api.github.com/user",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json"}); r.raise_for_status(); d=r.json()
@@ -41,7 +47,7 @@ async def installations():
         r=await c.get("https://api.github.com/user/installations",headers={"Authorization":f"Bearer {token}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}); r.raise_for_status(); d=r.json()
     return {"ok":True,"installations":[{"id":x["id"],"account":x.get("account",{}).get("login"),"target_type":x.get("target_type")} for x in d.get("installations",[])]}
 async def repositories(installation_id=None):
-    token=db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+    token=get_secret("github_oauth_token") if available() else os.getenv("GITHUB_TOKEN","")
     if not token:return {"ok":False,"repositories":[]}
     url=f"https://api.github.com/user/installations/{int(installation_id)}/repositories?per_page=100" if installation_id else "https://api.github.com/user/repos?per_page=100&sort=updated"
     async with httpx.AsyncClient(timeout=20) as c:
@@ -57,8 +63,8 @@ async def refresh():
     async with httpx.AsyncClient(timeout=20) as client:
         r=await client.post("https://github.com/login/oauth/access_token",data={"client_id":c["client_id"],"client_secret":c["client_secret"],"grant_type":"refresh_token","refresh_token":token},headers={"Accept":"application/json"}); r.raise_for_status(); d=r.json()
     if "access_token" not in d:return {"ok":False,"error":d.get("error_description","refresh failed")}
-    db.set_setting("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800))))
-    if d.get("refresh_token"): (set_secret("github_oauth_refresh_token",d["refresh_token"]) if available() else db.set_setting("github_oauth_refresh_token",d["refresh_token"]))
+    if not available(): return {"ok":False,"error":"OS keychain is required for GitHub OAuth refresh"}\n    set_secret("github_oauth_token",d["access_token"]); db.set_setting("github_oauth_expires_at",str(time.time()+int(d.get("expires_in",28800))))
+    if d.get("refresh_token"): set_secret("github_oauth_refresh_token",d["refresh_token"])
     os.environ["GITHUB_TOKEN"]=d["access_token"]; return await user()
 
 def app_configured():
@@ -73,6 +79,6 @@ async def app_installation_token(installation_id:int):
     if not app_configured(): return {"ok":False,"error":"GitHub App is not configured"}
     async with httpx.AsyncClient(timeout=20) as c:
         r=await c.post(f"https://api.github.com/app/installations/{installation_id}/access_tokens",headers={"Authorization":f"Bearer {_app_jwt()}","Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}); r.raise_for_status(); d=r.json()
-    token=d["token"]; set_secret("github_app_installation_token",token) if available() else db.set_setting("github_app_installation_token",token)
+    if not available(): return {"ok":False,"error":"OS keychain is required for GitHub App token storage"}\n    token=d["token"]; set_secret("github_app_installation_token",token)
     db.set_setting("github_app_installation_id",str(installation_id)); db.set_setting("github_app_token_expires_at",d.get("expires_at",""))
     return {"ok":True,"installation_id":installation_id,"expires_at":d.get("expires_at")}
