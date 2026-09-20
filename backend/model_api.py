@@ -25,6 +25,7 @@ class BenchmarkRun(BaseModel):
     model_id:str
     benchmark_id:str|None=None
     suite_version:str="v1"
+    repeats:int=1
 
 class RouteRequest(BaseModel):
     role:str
@@ -51,7 +52,7 @@ async def run_benchmarks(request: Request, body:BenchmarkRun):
     from main import router as ai_router
     try:
         model_lab.register(body.model_id, body.model_id.split(":",1)[0] if ":" in body.model_id else ("huggingface" if "/" in body.model_id else "local"))
-        return {"ok":True,"results":await model_lab.run_benchmark(body.model_id,ai_router,body.benchmark_id,body.suite_version)}
+        return {"ok":True,"results":await model_lab.run_benchmark(body.model_id,ai_router,body.benchmark_id,body.suite_version,body.repeats)}
     except ValueError as exc:
         raise HTTPException(400,str(exc))
     except Exception as exc:
@@ -90,3 +91,11 @@ async def observability():
         "recent_results": model_lab.results(limit=100),
         "evaluations": model_lab.evaluations(limit=50),
     }
+
+@router.get("/api/models/repeatability")
+async def model_repeatability(model_id: str, benchmark_id: str | None = None):
+    return {"model_id":model_id,"repeatability":model_lab.repeatability(model_id,benchmark_id)}
+
+@router.get("/api/models/regression")
+async def model_regression(model_id: str):
+    return {"model_id":model_id,"revisions":model_lab.revision_regression(model_id)}

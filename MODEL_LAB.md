@@ -61,3 +61,7 @@ Model registry mutations and benchmark/evaluator execution can be protected with
 Benchmark records retain the registered model revision so regressions can be compared across revisions. Evaluator summaries are stored separately from measured evidence and remain advisory.
 
 The observability endpoint exposes registry state, recent benchmark evidence, and evaluator summaries for dashboards and diagnostics.
+
+## Regression and repeatability
+
+Benchmark runs can be repeated (bounded to five repeats per request). DreamCoder exposes repeatability summaries with mean, min/max, and standard deviation, plus revision-grouped regression summaries. Benchmark records retain the registered model revision so behavior changes can be compared without treating a newer revision as automatically better or worse.

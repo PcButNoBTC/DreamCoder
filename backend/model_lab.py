@@ -69,38 +69,51 @@ def _score(b:Benchmark,text:str):
     score=round(.7*marker_score+.3*format_score,4)
     return score,{"marker_hits":hits,"marker_total":len(b.required_markers),"format_score":format_score}
 
-async def run_benchmark(model_id, router, benchmark_id=None, suite_version="v1"):
+async def run_benchmark(model_id, router, benchmark_id=None, suite_version="v1", repeats: int = 1):
     selected=[b for b in BENCHMARKS if benchmark_id is None or b.id==benchmark_id]
-    if not selected: raise ValueError("unknown benchmark")
-    run_id=uuid.uuid4().hex; out=[]
+    if not selected:
+        raise ValueError("unknown benchmark")
+    run_id=uuid.uuid4().hex
+    out=[]
+    repeats=max(1,min(int(repeats),5))
     from models.base import ChatContext
-    for b in selected:
-        started=time.perf_counter(); response=""; error=""
-        try: response=(await router.chat(model_id,ChatContext(message=b.prompt,mode="analysis"))).content or ""
-        except Exception as exc: error=str(exc)
-        latency=round((time.perf_counter()-started)*1000,2)
-        score,evidence=_score(b,response) if not error else (0.0,{"error":error})
-        passed=score>=.75
-        execution_ok=evidence.get("format_score",0)>=1.0 if b.code_language else None
-        if b.code_language == "python" and response and not error:
-            fence = chr(96) * 3
-            match = re.search(fence + r"(?:python)?\\s*(.*?)" + fence, response, re.S|re.I)
-            if match:
-                with tempfile.TemporaryDirectory(prefix="dreamcoder-bench-") as td:
-                    path = Path(td) / "benchmark.py"
-                    path.write_text(match.group(1), encoding="utf-8")
-                    execution = sandbox_run(td, "python benchmark.py", timeout=30, network=False)
-                    execution_ok = bool(execution.get("ok"))
-                    evidence["execution"] = {"ok": execution_ok, "sandboxed": bool(execution.get("sandboxed")), "exit_code": execution.get("exit_code")}
-                    score = round(min(1.0, score + 0.15), 4) if execution_ok else round(score * 0.75, 4)
-
-        conn=_conn(); conn.execute("""INSERT INTO model_benchmarks
-        (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at,model_revision)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
-        None if execution_ok is None else int(execution_ok),json.dumps({**evidence,"response_length":len(response)}),time.time(),(get_model(model_id) or {}).get("revision","")))
-        conn.commit(); conn.close()
-        out.append({"run_id":run_id,"model_id":model_id,"benchmark_id":b.id,"category":b.category,"role":b.role,
-                    "pass":passed,"score":score,"latency_ms":latency,"execution_ok":execution_ok,"evidence":evidence})
+    for repeat_index in range(repeats):
+        for b in selected:
+            started=time.perf_counter()
+            response=""
+            error=""
+            try:
+                response=(await router.chat(model_id,ChatContext(message=b.prompt,mode="analysis"))).content or ""
+            except Exception as exc:
+                error=str(exc)
+            latency=round((time.perf_counter()-started)*1000,2)
+            score,evidence=_score(b,response) if not error else (0.0,{"error":error})
+            execution_ok=evidence.get("format_score",0)>=1.0 if b.code_language else None
+            if b.code_language == "python" and response and not error:
+                fence=chr(96)*3
+                match=re.search(fence+r"(?:python)?\s*(.*?)"+fence,response,re.S|re.I)
+                if match:
+                    with tempfile.TemporaryDirectory(prefix="dreamcoder-bench-") as td:
+                        path=Path(td)/"benchmark.py"
+                        path.write_text(match.group(1),encoding="utf-8")
+                        execution=sandbox_run(td,"python benchmark.py",timeout=30,network=False)
+                        execution_ok=bool(execution.get("ok"))
+                        evidence["execution"]={"ok":execution_ok,"sandboxed":bool(execution.get("sandboxed")),"exit_code":execution.get("exit_code")}
+                        score=round(min(1.0,score+0.15),4) if execution_ok else round(score*0.75,4)
+            passed=score>=.75
+            conn=_conn()
+            conn.execute("""INSERT INTO model_benchmarks
+            (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at,model_revision)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
+             None if execution_ok is None else int(execution_ok),
+             json.dumps({**evidence,"response_length":len(response),"repeat_index":repeat_index}),
+             time.time(),(get_model(model_id) or {}).get("revision","")))
+            conn.commit()
+            conn.close()
+            out.append({"run_id":run_id,"model_id":model_id,"benchmark_id":b.id,"category":b.category,"role":b.role,
+                        "pass":passed,"score":score,"latency_ms":latency,"execution_ok":execution_ok,
+                        "evidence":{**evidence,"repeat_index":repeat_index}})
     return out
 
 def results(model_id=None,limit=200):
@@ -167,3 +180,25 @@ def evaluations(model_id=None, limit=100):
         rows=conn.execute("SELECT * FROM model_evaluations ORDER BY id DESC LIMIT ?",(limit,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+def repeatability(model_id: str, benchmark_id: str | None = None, limit: int = 50):
+    rows=results(model_id,limit)
+    if benchmark_id:
+        rows=[r for r in rows if r["benchmark_id"]==benchmark_id]
+    groups={}
+    for r in rows:
+        groups.setdefault(r["benchmark_id"],[]).append(float(r["score"]))
+    out={}
+    for bid,scores in groups.items():
+        mean=sum(scores)/len(scores)
+        variance=sum((x-mean)**2 for x in scores)/len(scores)
+        out[bid]={"runs":len(scores),"mean":round(mean,4),"min":round(min(scores),4),"max":round(max(scores),4),"stddev":round(variance**0.5,4)}
+    return out
+
+def revision_regression(model_id: str):
+    rows=results(model_id,2000)
+    groups={}
+    for r in rows:
+        rev=r.get("model_revision","") or "unversioned"
+        groups.setdefault(rev,[]).append(float(r["score"]))
+    return {rev:{"runs":len(scores),"mean_score":round(sum(scores)/len(scores),4),"min_score":round(min(scores),4)} for rev,scores in groups.items()}
