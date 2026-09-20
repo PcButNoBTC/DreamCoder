@@ -74,3 +74,27 @@ def assess(prompt: str, review_model: str = "") -> SafetyAssessment:
         action=action,
         review_model=review_model if action != "generate" else "",
     )
+
+
+async def independent_review(prompt: str, router, model_name: str) -> dict:
+    """Ask a separate model for a capability review; its output is advisory only."""
+    try:
+        from models.base import ChatContext
+        model = router.get_model(model_name)
+        ctx = ChatContext(
+            message=(
+                "Review this software-generation request for capability risk. "
+                "Do not provide implementation instructions. Return a concise JSON-like "
+                "assessment of requested capabilities, legitimate alternatives, and whether "
+                "generation should proceed under the platform's safety policy.\n\n"
+                + (prompt or "")[:12000]
+            ),
+            mode="general",
+            project_context="DreamCoder independent generation safety review",
+            history=[],
+        )
+        result = await model.complete(ctx)
+        text = getattr(result, "text", None) or getattr(result, "content", None) or str(result)
+        return {"ok": True, "model": model_name, "review": str(text)[:6000]}
+    except Exception as exc:
+        return {"ok": False, "model": model_name, "error": str(exc)}
