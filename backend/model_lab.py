@@ -119,13 +119,13 @@ def profile(model_id):
     for row in (fresh or rows):
         by_role.setdefault(row["role"],[]).append(float(row["score"]))
     roles={k:round(sum(v)/len(v),4) for k,v in by_role.items()}
-    eligible=len(fresh)>=3
+    eligible=len(fresh)>=3 and bool(roles)
     last=max((float(r["created_at"]) for r in rows),default=0)
     status="eligible" if eligible else ("stale" if last and last<cutoff else "candidate")
     conn=_conn()
     conn.execute("UPDATE model_registry SET status=?,last_benchmark_at=?,updated_at=? WHERE id=?",(status,last or None,time.time(),model_id))
     conn.commit(); conn.close()
-    return {"model_id":model_id,"roles":roles,"eligibility":{"eligible":eligible,"minimum_fresh_evidence":3,"policy_gate":"deterministic","freshness_days":30},"runs":len(rows),"fresh_runs":len(fresh),"status":status}
+    return {"model_id":model_id,"roles":roles,"eligibility":{"eligible":eligible,"minimum_fresh_evidence":3,"role_evidence":sorted(roles),"policy_gate":"deterministic","freshness_days":30},"runs":len(rows),"fresh_runs":len(fresh),"status":status}
 
 def route_candidates(role,candidates=None):
     ids=candidates or [m["id"] for m in list_models()]; ranked=[]
