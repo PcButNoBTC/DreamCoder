@@ -43,6 +43,19 @@ function resolveApiBase() {
 
 const API_BASE = resolveApiBase();
 
+function resolveWebSocketBase() {
+  try {
+    const url = new URL(API_BASE || "http://127.0.0.1:8000");
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = url.pathname.replace(/\/$/, "");
+    return url.toString().replace(/\/$/, "");
+  } catch (_) {
+    return "ws://127.0.0.1:8000";
+  }
+}
+
+const WS_BASE = resolveWebSocketBase();
+
 function showSyncBanner(message, kind="error", backupPath="") {
   let banner=document.getElementById("syncBanner");
   if(!banner){
@@ -3012,7 +3025,7 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
     if(tab==="Terminal"){
       body.innerHTML='<h3>PTY Terminal</h3><div class=dc-row><input id=dcTermCmd value="'+escapeHtml(localStorage.getItem("dc_term_cmd")||"")+'" placeholder="command"/><button id=dcTermStart>Start</button><button id=dcTermStop>Stop</button></div><div id=dcTermLog class=dc-log></div>';
       let socket=null,current=null;
-      body.querySelector("#dcTermStart").onclick=async()=>{const cmd=body.querySelector("#dcTermCmd").value;localStorage.setItem("dc_term_cmd",cmd);const d=await post("/api/terminal/session",{command:cmd});current=d.id;socket=new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.hostname+":8000/ws/terminal/"+d.id);socket.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==="output")body.querySelector("#dcTermLog").textContent+=m.text;else body.querySelector("#dcTermLog").textContent+=e.data;}catch(_){body.querySelector("#dcTermLog").textContent+=e.data;}};socket.onopen=()=>socket.send(JSON.stringify({op:"resize",cols:120,rows:30}));};
+      body.querySelector("#dcTermStart").onclick=async()=>{const cmd=body.querySelector("#dcTermCmd").value;localStorage.setItem("dc_term_cmd",cmd);const d=await post("/api/terminal/session",{command:cmd});current=d.id;socket=new WebSocket(WS_BASE+"/ws/terminal/"+encodeURIComponent(d.id));socket.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==="output")body.querySelector("#dcTermLog").textContent+=m.text;else body.querySelector("#dcTermLog").textContent+=e.data;}catch(_){body.querySelector("#dcTermLog").textContent+=e.data;}};socket.onopen=()=>socket.send(JSON.stringify({op:"resize",cols:120,rows:30}));};
       body.querySelector("#dcTermStop").onclick=()=>socket?.send(JSON.stringify({op:"signal",signal:"SIGINT"})); return;
     }
     if(tab==="Settings"){
