@@ -1,6 +1,8 @@
 """Evidence-backed Model Lab, registry, benchmarks, and routing."""
 from __future__ import annotations
-import json, re, time, uuid
+import json, re, time, uuid, tempfile
+from pathlib import Path
+from sandbox import run as sandbox_run
 from dataclasses import asdict, dataclass
 from typing import Any
 import db
@@ -28,27 +30,7 @@ BENCHMARKS = (
 )
 
 def _conn():
-    conn=db.get_conn()
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS model_registry (
-      id TEXT PRIMARY KEY, provider TEXT NOT NULL, name TEXT NOT NULL,
-      revision TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'candidate',
-      metadata_json TEXT NOT NULL DEFAULT '{}', created_at REAL NOT NULL, updated_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS model_benchmarks (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, model_id TEXT NOT NULL, benchmark_id TEXT NOT NULL,
-      suite_version TEXT NOT NULL, run_id TEXT NOT NULL, category TEXT NOT NULL, role TEXT NOT NULL,
-      pass INTEGER NOT NULL, score REAL NOT NULL, latency_ms REAL NOT NULL DEFAULT 0,
-      evaluator_score REAL, execution_ok INTEGER, evidence_json TEXT NOT NULL DEFAULT '{}', created_at REAL NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_model_benchmarks_model ON model_benchmarks(model_id, created_at);
-    CREATE TABLE IF NOT EXISTS model_routing_profiles (
-      model_id TEXT PRIMARY KEY, eligibility_json TEXT NOT NULL DEFAULT '{}',
-      roles_json TEXT NOT NULL DEFAULT '{}', rationale TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL
-    );
-    """)
-    conn.commit()
-    return conn
+    return db.get_conn()
 
 def _row(row):
     if not row: return None
@@ -98,7 +80,20 @@ async def run_benchmark(model_id, router, benchmark_id=None, suite_version="v1")
         except Exception as exc: error=str(exc)
         latency=round((time.perf_counter()-started)*1000,2)
         score,evidence=_score(b,response) if not error else (0.0,{"error":error})
-        passed=score>=.75; execution_ok=evidence.get("format_score",0)>=1.0 if b.code_language else None
+        passed=score>=.75
+        execution_ok=evidence.get("format_score",0)>=1.0 if b.code_language else None
+        if b.code_language == "python" and response and not error:
+            fence = chr(96) * 3
+            match = re.search(fence + r"(?:python)?\\s*(.*?)" + fence, response, re.S|re.I)
+            if match:
+                with tempfile.TemporaryDirectory(prefix="dreamcoder-bench-") as td:
+                    path = Path(td) / "benchmark.py"
+                    path.write_text(match.group(1), encoding="utf-8")
+                    execution = sandbox_run(td, "python benchmark.py", timeout=30, network=False)
+                    execution_ok = bool(execution.get("ok"))
+                    evidence["execution"] = {"ok": execution_ok, "sandboxed": bool(execution.get("sandboxed")), "exit_code": execution.get("exit_code")}
+                    score = round(min(1.0, score + 0.15), 4) if execution_ok else round(score * 0.75, 4)
+
         conn=_conn(); conn.execute("""INSERT INTO model_benchmarks
         (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
@@ -117,10 +112,20 @@ def results(model_id=None,limit=200):
     return out
 
 def profile(model_id):
-    rows=results(model_id,1000); by_role={}
-    for row in rows: by_role.setdefault(row["role"],[]).append(float(row["score"]))
+    rows=results(model_id,1000)
+    cutoff=time.time()-30*24*60*60
+    fresh=[r for r in rows if float(r["created_at"])>=cutoff]
+    by_role={}
+    for row in (fresh or rows):
+        by_role.setdefault(row["role"],[]).append(float(row["score"]))
     roles={k:round(sum(v)/len(v),4) for k,v in by_role.items()}
-    return {"model_id":model_id,"roles":roles,"eligibility":{"eligible":len(rows)>=3,"minimum_evidence":len(rows)>=3,"policy_gate":"deterministic"},"runs":len(rows)}
+    eligible=len(fresh)>=3
+    last=max((float(r["created_at"]) for r in rows),default=0)
+    status="eligible" if eligible else ("stale" if last and last<cutoff else "candidate")
+    conn=_conn()
+    conn.execute("UPDATE model_registry SET status=?,last_benchmark_at=?,updated_at=? WHERE id=?",(status,last or None,time.time(),model_id))
+    conn.commit(); conn.close()
+    return {"model_id":model_id,"roles":roles,"eligibility":{"eligible":eligible,"minimum_fresh_evidence":3,"policy_gate":"deterministic","freshness_days":30},"runs":len(rows),"fresh_runs":len(fresh),"status":status}
 
 def route_candidates(role,candidates=None):
     ids=candidates or [m["id"] for m in list_models()]; ranked=[]
