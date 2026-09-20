@@ -110,6 +110,34 @@ def _make_local() -> BaseModel:
     return MockModel("Local Model (mock)")
 
 
+def _local_format_markers() -> tuple[str, ...]:
+    """Return known local-format markers that should never be sent to the public HF Inference API."""
+    return (
+        "gguf",
+        "ggml",
+        "mlx",
+        "awq",
+        "gptq",
+        "marlin",
+        "exl2",
+        "q4_",
+        "q5_",
+        "q8_",
+        "quantized",
+        "int4",
+        "int8",
+        "fp8",
+    )
+
+
+def _looks_like_local_format_model(name: str) -> bool:
+    """True when the selected model is a local compiled or quantized format rather than a normal HF API endpoint."""
+    model = (name or "").strip().lower()
+    if not model:
+        return False
+    return any(marker in model for marker in _local_format_markers())
+
+
 def _local_ollama_model_for(name: str) -> Optional[OllamaModel]:
     """Respect a configured local Ollama backend even when the UI selected a different model string."""
     if not (os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")):
@@ -160,7 +188,9 @@ class AIRouter:
             self._models[name] = OllamaModel(name.split(":", 1)[1])
             return self._models[name]
         if name.startswith("hf:"):
-            self._models[name] = HuggingFaceModel(model_id=name.split(":", 1)[1])
+            model_id = name.split(":", 1)[1]
+            use_api = not _looks_like_local_format_model(model_id)
+            self._models[name] = HuggingFaceModel(model_id=model_id, use_api=use_api)
             return self._models[name]
         if name.startswith("openai:"):
             self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
@@ -175,6 +205,15 @@ class AIRouter:
         )
         local_backend = _effective_local_backend()
         has_hf_tokens = bool(HuggingFaceModel._discover_tokens())
+
+        # Local compiled/quantized models such as GGUF or MLX are not valid HF Inference API targets.
+        # When such a model is selected, prefer the configured local engine and disable the API route.
+        if _looks_like_local_format_model(name):
+            if local_backend == "ollama" or ollama_base:
+                self._models[name] = OllamaModel(ollama_model, base_url=ollama_base or "http://localhost:11434")
+                return self._models[name]
+            self._models[name] = HuggingFaceModel(model_id=name, use_api=False)
+            return self._models[name]
 
         # Explicit local Ollama config should win only when the user actually configured it.
         if local_backend == "ollama" and ollama_base and not has_hf_tokens and "/" in name and not name.lower().startswith(("http://", "https://")):
