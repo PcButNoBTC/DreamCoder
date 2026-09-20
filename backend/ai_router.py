@@ -10,6 +10,7 @@ import os
 from typing import Any, Optional
 
 from cache import SuggestionCache
+from hf_catalog import get_catalog
 from models import (
     BaseModel,
     ChatContext,
@@ -52,13 +53,25 @@ MODEL_REGISTRY = {
 }
 
 
+def _effective_local_backend() -> str:
+    """Pick the default local backend without forcing a dead Ollama install."""
+    backend = (os.getenv("DREAMCODER_LOCAL_BACKEND") or "").strip().lower()
+    if backend:
+        return backend
+    if os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL"):
+        return "ollama"
+    if HuggingFaceModel._discover_tokens():
+        return "huggingface"
+    return "mock"
+
+
 def _make_local() -> BaseModel:
-    """Prefer a real local provider. Default to Ollama when it is configured."""
-    backend = os.getenv("DREAMCODER_LOCAL_BACKEND", "ollama").lower()
+    """Prefer a real local provider. Fall back to HF when no Ollama backend is configured."""
+    backend = _effective_local_backend()
     if backend == "ollama":
         return OllamaModel(os.getenv("OLLAMA_MODEL", "tinyllama"), base_url=os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or "http://localhost:11434")
     if backend == "huggingface":
-        return HuggingFaceModel()
+        return HuggingFaceModel(model_id=os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct"))
     return MockModel("Local Model (mock)")
 
 
@@ -148,29 +161,52 @@ class AIRouter:
         return self._models[name]
 
     async def list_models(self) -> list[dict[str, Any]]:
-        """Discover provider-backed models and prefer the local Ollama route by default."""
+        """Discover provider-backed models and prefer the configured local route without forcing dead Ollama instances."""
         models: list[dict[str, Any]] = []
 
-        ollama_url = os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
-        ollama_requested = os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL") or os.getenv("OLLAMA_MODEL") or "tinyllama"
-        ollama = OllamaModel(ollama_requested, base_url=ollama_url)
-        ollama_health = await ollama.health_check()
+        local_backend = _effective_local_backend()
+        if local_backend == "ollama":
+            ollama_url = os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or os.getenv("OLLAMA_BASE_URL") or "http://localhost:11434"
+            ollama_requested = os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL") or os.getenv("OLLAMA_MODEL") or "tinyllama"
+            ollama = OllamaModel(ollama_requested, base_url=ollama_url)
+            ollama_health = await ollama.health_check()
 
-        if ollama_health.get("status") in {"ready", "model-missing"} or os.getenv("DREAMCODER_LOCAL_BACKEND", "ollama").lower() == "ollama":
-            models.append({"id": "Local Model", "name": "Local Model", "provider": "ollama", "status": "ready", "real": True})
-            for tag in ollama_health.get("available_models", []):
-                models.append({"id": f"ollama:{tag}", "name": tag, "provider": "ollama", "status": "ready", "real": True})
-            if ollama_health.get("status") == "ready" and not any(m["provider"] == "ollama" for m in models):
-                models.append({"id": f"ollama:{ollama_requested}", "name": ollama_requested, "provider": "ollama", "status": "ready", "real": True})
+            if ollama_health.get("status") in {"ready", "model-missing"} or os.getenv("DREAMCODER_LOCAL_BACKEND", "").lower() == "ollama":
+                models.append({"id": "Local Model", "name": "Local Model", "provider": "ollama", "status": "ready", "real": True})
+                for tag in ollama_health.get("available_models", []):
+                    models.append({"id": f"ollama:{tag}", "name": tag, "provider": "ollama", "status": "ready", "real": True})
+                if ollama_health.get("status") == "ready" and not any(m["provider"] == "ollama" for m in models):
+                    models.append({"id": f"ollama:{ollama_requested}", "name": ollama_requested, "provider": "ollama", "status": "ready", "real": True})
+        elif local_backend == "huggingface":
+            models.append({"id": "Local Model", "name": "Local Model", "provider": "huggingface", "status": "ready", "real": True})
 
         hf_tokens = [
             os.getenv("HF_TOKEN"),
             *[os.getenv(f"HF_TOKEN_{i}") for i in range(1, 25)],
         ]
         if any(token and token.strip() for token in hf_tokens):
+            try:
+                catalog = await get_catalog()
+                for model in catalog.get("models", [])[:80]:
+                    model_id = model.get("id") or model.get("name")
+                    if not model_id:
+                        continue
+                    entry = {
+                        "id": f"hf:{model_id}",
+                        "name": model.get("name") or model_id,
+                        "provider": "huggingface",
+                        "status": "ready",
+                        "real": True,
+                    }
+                    if not any(existing["id"] == entry["id"] for existing in models):
+                        models.append(entry)
+            except Exception:
+                pass
+
             hf_id = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
             health = await HuggingFaceModel(model_id=hf_id).health_check()
-            models.append({"id": f"hf:{hf_id}", "name": hf_id, "provider": "huggingface", "status": health.get("status", "configured"), "real": True})
+            if not any(m["id"] == f"hf:{hf_id}" for m in models):
+                models.append({"id": f"hf:{hf_id}", "name": hf_id, "provider": "huggingface", "status": health.get("status", "configured"), "real": True})
 
         openai_model = os.getenv("OPENAI_MODEL", "")
         if openai_model and (os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_BASE_URL")):

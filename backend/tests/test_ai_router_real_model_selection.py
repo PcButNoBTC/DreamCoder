@@ -46,6 +46,19 @@ def test_selected_model_prefers_configured_local_ollama(monkeypatch):
     assert getattr(model, "model_name", "") == "tinyllama"
 
 
+def test_local_model_falls_back_to_hf_when_ollama_is_unconfigured(monkeypatch):
+    monkeypatch.delenv("DREAMCODER_LOCAL_BACKEND", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.delenv("DREAMCODER_OLLAMA_PRIMARY_URL", raising=False)
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.setenv("HF_TOKEN", "hf-test-token")
+    router = AIRouter()
+
+    model = router.get_model("Local Model")
+
+    assert isinstance(model, HuggingFaceModel)
+
+
 def test_hf_repo_model_id_does_not_fall_back_to_mock(monkeypatch):
     monkeypatch.delenv("HF_TOKEN", raising=False)
     monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "mock")
@@ -68,6 +81,30 @@ def test_list_models_prefers_ollama_when_configured(monkeypatch):
 
     assert models[0]["provider"] == "ollama"
     assert models[0]["id"] == "Local Model"
+
+
+def test_list_models_includes_hf_catalog_when_token_present(monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf-test-token")
+    monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "mock")
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    async def fake_get_catalog(force_refresh=False, search=""):
+        return {
+            "models": [
+                {"id": "meta-llama/Llama-3.1-8B-Instruct", "name": "Llama-3.1-8B-Instruct"},
+                {"id": "Qwen/Qwen2.5-Coder-7B-Instruct", "name": "Qwen2.5-Coder-7B-Instruct"},
+            ]
+        }
+
+    import ai_router
+    monkeypatch.setattr(ai_router, "get_catalog", fake_get_catalog)
+
+    router = AIRouter()
+    models = asyncio.run(router.list_models())
+
+    ids = {m["id"] for m in models}
+    assert "hf:meta-llama/Llama-3.1-8B-Instruct" in ids
+    assert "hf:Qwen/Qwen2.5-Coder-7B-Instruct" in ids
 
 
 def test_ollama_model_uses_primary_url_when_configured(monkeypatch):
