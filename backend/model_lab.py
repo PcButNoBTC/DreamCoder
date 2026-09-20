@@ -1,8 +1,12 @@
 """Evidence-backed Model Lab, registry, benchmarks, and routing."""
 from __future__ import annotations
-import json, re, time, uuid, tempfile
+import asyncio, json, re, time, uuid, tempfile, os
 from pathlib import Path
 from sandbox import run as sandbox_run
+
+_BENCHMARK_CONCURRENCY = max(1, int(os.getenv("DREAMCODER_MODEL_LAB_CONCURRENCY", "2")))
+_BENCHMARK_TIMEOUT = max(10, int(os.getenv("DREAMCODER_MODEL_LAB_TIMEOUT", "180")))
+_BENCHMARK_SEMAPHORE = asyncio.Semaphore(_BENCHMARK_CONCURRENCY)
 from dataclasses import asdict, dataclass
 from typing import Any
 import db
@@ -89,7 +93,11 @@ async def run_benchmark(model_id, router, benchmark_id=None, suite_version="v1",
             response=""
             error=""
             try:
-                response=(await router.chat(model_id,ChatContext(message=b.prompt,mode="analysis"))).content or ""
+                async with _BENCHMARK_SEMAPHORE:
+                    response=(await asyncio.wait_for(
+                        router.chat(model_id,ChatContext(message=b.prompt,mode="analysis")),
+                        timeout=_BENCHMARK_TIMEOUT
+                    )).content or ""
             except Exception as exc:
                 error=str(exc)
             latency=round((time.perf_counter()-started)*1000,2)
