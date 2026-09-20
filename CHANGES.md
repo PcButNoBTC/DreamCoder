@@ -47,3 +47,11 @@
 - Added fresh-evidence eligibility and executable Python benchmark evidence through the hardened sandbox.
 - Wired generation tasks to measured role evidence first, with the existing capability selector as a fallback.
 - Added migration CLI and a Task Graph frontend panel.
+
+
+## Model lifecycle + observability
+- Added revision-aware benchmark evidence and stale/eligible lifecycle tracking.
+- Added persistent evaluator summaries without allowing evaluator prose to override measured routing eligibility.
+- Added optional admin-token protection for registry/benchmark/evaluation mutations.
+- Added Project Hub provenance events for task graph creation, assignment, and status changes.
+- Added model lifecycle/security tests and observability APIs.
