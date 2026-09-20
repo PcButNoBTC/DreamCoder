@@ -557,7 +557,18 @@ function renderSuggestions(suggestions) {
       e.stopPropagation();
       row.remove();
       toast("Suggestion ignored", "info");
-    div.className = "insight";
+    };
+    card.appendChild(row);
+  });
+}
+
+function renderInsights(insights) {
+    const card = document.getElementById("insightsCard");
+    if (!card) return;
+    card.innerHTML = "";
+    (insights || []).forEach((ins) => {
+      const div = document.createElement("div");
+      div.className = "insight";
     div.innerHTML = `<span class="icon">${ins.icon || "•"}</span><div><strong>${escapeHtml(ins.title)}</strong><small>${escapeHtml(ins.detail || "")}</small></div>`;
     card.appendChild(div);
   });
