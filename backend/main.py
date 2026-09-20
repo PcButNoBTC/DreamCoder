@@ -25,6 +25,7 @@ from watcher import IndexWatcher
 from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, monitor_insights, chat_reply
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, generate_project_with_model, self_heal, files_to_zip
+from generation.orchestrator import model_capabilities
 from github_sync import github_sync
 from quota_tracker import snapshot as quota_snapshot
 import workspace
@@ -1322,6 +1323,23 @@ async def hf_select(payload: dict):
 
 
 # ---------- Project generator + self-heal ----------
+
+@app.get("/api/ai/generation/capabilities")
+async def generation_capabilities():
+    """Expose the live model capability map used by generate()."""
+    models = await router.list_models()
+    return {
+        "models": [
+            {
+                "id": m.get("id") or m.get("name"),
+                "name": m.get("name") or m.get("id"),
+                "provider": m.get("provider", "unknown"),
+                "status": m.get("status", "unknown"),
+                "capabilities": sorted(model_capabilities(str(m.get("id") or m.get("name") or ""))),
+            }
+            for m in models
+        ]
+    }
 
 @app.post("/api/ai/generate-project")
 async def api_generate_project(req: GenerateProjectRequest):
