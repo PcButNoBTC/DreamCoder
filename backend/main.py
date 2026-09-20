@@ -42,6 +42,7 @@ from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
 from sandbox import run as sandbox_run, available as sandbox_available
 from provider_runtime import runtime as provider_runtime
+from project_health import health as project_health
 from editor_recovery import three_way_merge
 
 # ---------------------------------------------------------------------------
@@ -298,6 +299,10 @@ async def production_readiness():
 @app.get("/api/production/diagnostics")
 async def production_diagnostics():
     return diagnostics(str(workspace.root()) if workspace.root() else None)
+
+@app.get("/api/project/health")
+async def project_health_status():
+    return project_health(str(workspace.root()) if workspace.root() else None)
 
 @app.get("/api/github/oauth/config")
 async def github_oauth_config():
