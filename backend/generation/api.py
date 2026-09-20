@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from generation.jobs import jobs
-from generation.safety import assess
+from generation.safety import assess, independent_review
 from project_hub import create as create_project, event as project_event, set_status as set_project_status, document as project_document, artifact as project_artifact
 
 router=APIRouter(tags=["generation","projects"])
@@ -18,18 +18,19 @@ class JobRequest(BaseModel):
 async def start_generation_job(body: JobRequest):
     from main import router as ai_router
     assessment=assess(body.prompt,body.safeguard_model)
+    review = await independent_review(body.prompt, ai_router, body.safeguard_model) if assessment.requires_review else {"ok": True, "model": body.safeguard_model, "review": "No elevated-risk review required."}
     name="generated-project"
     project=create_project(name,body.goal or body.prompt[:200],body.prompt,{},assessment.level)
-    project_event(project["id"],"generation.assessment","safety-router",body.safeguard_model,assessment.as_dict())
+    project_event(project["id"],"generation.assessment","safety-router",body.safeguard_model,{"assessment": assessment.as_dict(), "independent_review": review})
     if assessment.action=="block":
         set_project_status(project["id"],"blocked",assessment.level)
         project_document(project["id"],"security","Security Review",
                          "Generation was stopped because the requested capability combination requires a safety boundary.\n\n"
                          + "\n".join("- "+x for x in assessment.reasons))
-        return {"ok":False,"job_id":None,"project_id":project["id"],"status":"blocked","assessment":assessment.as_dict()}
+        return {"ok":False,"job_id":None,"project_id":project["id"],"status":"blocked","assessment":assessment.as_dict(),"independent_review":review}
     async def runner(request, emit):
         emit("generation.plan.started", project_id=project["id"], safeguard_model=body.safeguard_model)
-        project_event(project["id"],"generation.started","orchestrator",request.get("model",""),{"safeguard_model":body.safeguard_model})
+        project_event(project["id"],"generation.started","orchestrator",request.get("model",""),{"safeguard_model":body.safeguard_model,"independent_review":review})
         from generator import generate_project_with_model
         result=await generate_project_with_model(request["prompt"],request.get("goal",""),router=ai_router)
         project_event(project["id"],"generation.completed","orchestrator",request.get("model",""),
