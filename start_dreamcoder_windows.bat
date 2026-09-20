@@ -57,8 +57,6 @@ echo DreamCoder started.
 echo Backend: http://127.0.0.1:8000
 echo Frontend: http://127.0.0.1:8001/frontend/index.html
 echo.
-echo If the page still shows offline, open DevTools and run:
-echo   window.DREAMCODER_API = "http://127.0.0.1:8000";
-echo   location.reload();
+echo The frontend automatically connects to the local backend at port 8000.
 
 exit /b 0

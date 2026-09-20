@@ -351,10 +351,22 @@ Type a command and press Enter (runs on the machine hosting the backend).
   <script>
     (function(){
       if (!window.DREAMCODER_API) {
-        const host = String(window.location.hostname || "");
+        const params = new URLSearchParams(window.location.search || "");
+        const queryApi = params.get("api");
+        if (queryApi) {
+          try {
+            const parsed = new URL(queryApi, window.location.href);
+            if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+              window.DREAMCODER_API = parsed.href.replace(/\/$/, "");
+            }
+          } catch (_) {}
+        }
+        const host = String(window.location.hostname || "").toLowerCase();
         const port = String(window.location.port || "");
-        const isStaticShell = ["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port);
-        if (isStaticShell || host === "127.0.0.1" || host === "localhost" || host === "0.0.0.0") {
+        const isLocalShell = ["127.0.0.1", "localhost", "0.0.0.0", "::1"].includes(host);
+        const isGithubPages = host.endsWith(".github.io");
+        const isStaticShell = isLocalShell && ["8001", "3000"].includes(port);
+        if (!window.DREAMCODER_API && (isStaticShell || isGithubPages || window.location.protocol === "file:")) {
           window.DREAMCODER_API = "http://127.0.0.1:8000";
         }
       }
