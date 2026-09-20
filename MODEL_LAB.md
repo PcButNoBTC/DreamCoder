@@ -33,3 +33,23 @@ A Hugging Face model can be registered with its Hub ID and optional revision. Th
 ## Evidence retention
 
 Stored benchmark records include model, benchmark, suite version, run ID, role, score, latency, execution status, and compact evidence metadata. Full model responses are not persisted by the Model Lab database.
+
+## Orchestration task graph
+
+A generated project is represented as a persistent task graph rather than one monolithic model call:
+
+`planning → architecture → requirements → generation → validation → testing → debugging → documentation → review`.
+
+Each task has a role, dependency list, selected model, status, attempts, timestamps, and compact output/error metadata. The role router consults fresh benchmark evidence first and falls back to the existing capability selector when measured evidence is unavailable.
+
+## Evidence freshness
+
+Routing uses benchmark evidence from the last 30 days. A model is not eligible for a role unless it has fresh evidence and at least three fresh benchmark records overall. Benchmark execution records compact evidence only; full model responses are not persisted.
+
+## Executable benchmark evidence
+
+The Python implementation benchmark is syntax-checked and, when a container runtime is available, executed inside the hardened sandbox with networking disabled. Other benchmarks remain structured-output checks. This keeps objective execution evidence separate from evaluator prose.
+
+## Lifecycle
+
+Models move through practical states such as `candidate`, `eligible`, and `stale`. A new revision or materially changed provider configuration should be registered with a new revision and re-benchmarked before routing uses it.
