@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sqlite3, time
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 5
 
 MIGRATIONS = {
     1: """
@@ -54,6 +54,14 @@ MIGRATIONS = {
     );
     CREATE INDEX IF NOT EXISTS idx_project_events_project ON project_events(project_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_project_docs_project ON project_documents(project_id);
+    """,
+    5: """
+    CREATE TABLE IF NOT EXISTS project_model_preferences (
+      project_id TEXT NOT NULL, role TEXT NOT NULL, model_id TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT 'auto', updated_at REAL NOT NULL,
+      PRIMARY KEY(project_id, role)
+    );
+    CREATE INDEX IF NOT EXISTS idx_project_model_preferences_project ON project_model_preferences(project_id);
     """,
     4: """
     ALTER TABLE model_benchmarks ADD COLUMN model_revision TEXT NOT NULL DEFAULT '';
