@@ -83,6 +83,8 @@ def init_db() -> None:
         """
     )
     conn.commit()
+    from migrations import apply as apply_migrations
+    apply_migrations(conn)
     conn.close()
 
 
