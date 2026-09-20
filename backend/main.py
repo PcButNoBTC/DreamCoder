@@ -26,6 +26,7 @@ from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, m
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, generate_project_with_model, self_heal, files_to_zip
 from generation.orchestrator import model_capabilities
+from generation.api import router as generation_router
 from github_sync import github_sync
 from quota_tracker import snapshot as quota_snapshot
 import workspace
@@ -52,11 +53,23 @@ app = FastAPI(
 
 
 app.include_router(agent_router)
+app.include_router(generation_router)
 
+
+def _cors_origins() -> list[str]:
+    configured = os.getenv("DREAMCODER_CORS_ORIGINS", "")
+    if configured.strip():
+        return [x.strip() for x in configured.split(",") if x.strip()]
+    return [
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://localhost:8000",
+        "http://localhost:8001",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
