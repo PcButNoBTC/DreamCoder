@@ -71,36 +71,49 @@ def _score(b:Benchmark,text:str):
 
 async def run_benchmark(model_id, router, benchmark_id=None, suite_version="v1", repeats: int = 1):
     selected=[b for b in BENCHMARKS if benchmark_id is None or b.id==benchmark_id]
-    if not selected: raise ValueError("unknown benchmark")
-    run_id=uuid.uuid4().hex; out=[]\n    repeats=max(1,min(int(repeats),5))
+    if not selected:
+        raise ValueError("unknown benchmark")
+    run_id=uuid.uuid4().hex
+    out=[]
+    repeats=max(1,min(int(repeats),5))
     from models.base import ChatContext
-    for repeat_index in range(repeats):\n      for b in selected:
-        started=time.perf_counter(); response=""; error=""
-        try: response=(await router.chat(model_id,ChatContext(message=b.prompt,mode="analysis"))).content or ""
-        except Exception as exc: error=str(exc)
-        latency=round((time.perf_counter()-started)*1000,2)
-        score,evidence=_score(b,response) if not error else (0.0,{"error":error})
-        passed=score>=.75
-        execution_ok=evidence.get("format_score",0)>=1.0 if b.code_language else None
-        if b.code_language == "python" and response and not error:
-            fence = chr(96) * 3
-            match = re.search(fence + r"(?:python)?\\s*(.*?)" + fence, response, re.S|re.I)
-            if match:
-                with tempfile.TemporaryDirectory(prefix="dreamcoder-bench-") as td:
-                    path = Path(td) / "benchmark.py"
-                    path.write_text(match.group(1), encoding="utf-8")
-                    execution = sandbox_run(td, "python benchmark.py", timeout=30, network=False)
-                    execution_ok = bool(execution.get("ok"))
-                    evidence["execution"] = {"ok": execution_ok, "sandboxed": bool(execution.get("sandboxed")), "exit_code": execution.get("exit_code")}
-                    score = round(min(1.0, score + 0.15), 4) if execution_ok else round(score * 0.75, 4)
-
-        conn=_conn(); conn.execute("""INSERT INTO model_benchmarks
-        (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at,model_revision)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
-        None if execution_ok is None else int(execution_ok),json.dumps({**evidence,"response_length":len(response),"repeat_index":repeat_index}),time.time(),(get_model(model_id) or {}).get("revision","")))
-        conn.commit(); conn.close()
-        out.append({"run_id":run_id,"model_id":model_id,"benchmark_id":b.id,"category":b.category,"role":b.role,
-                    "pass":passed,"score":score,"latency_ms":latency,"execution_ok":execution_ok,"evidence":evidence})
+    for repeat_index in range(repeats):
+        for b in selected:
+            started=time.perf_counter()
+            response=""
+            error=""
+            try:
+                response=(await router.chat(model_id,ChatContext(message=b.prompt,mode="analysis"))).content or ""
+            except Exception as exc:
+                error=str(exc)
+            latency=round((time.perf_counter()-started)*1000,2)
+            score,evidence=_score(b,response) if not error else (0.0,{"error":error})
+            execution_ok=evidence.get("format_score",0)>=1.0 if b.code_language else None
+            if b.code_language == "python" and response and not error:
+                fence=chr(96)*3
+                match=re.search(fence+r"(?:python)?\s*(.*?)"+fence,response,re.S|re.I)
+                if match:
+                    with tempfile.TemporaryDirectory(prefix="dreamcoder-bench-") as td:
+                        path=Path(td)/"benchmark.py"
+                        path.write_text(match.group(1),encoding="utf-8")
+                        execution=sandbox_run(td,"python benchmark.py",timeout=30,network=False)
+                        execution_ok=bool(execution.get("ok"))
+                        evidence["execution"]={"ok":execution_ok,"sandboxed":bool(execution.get("sandboxed")),"exit_code":execution.get("exit_code")}
+                        score=round(min(1.0,score+0.15),4) if execution_ok else round(score*0.75,4)
+            passed=score>=.75
+            conn=_conn()
+            conn.execute("""INSERT INTO model_benchmarks
+            (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at,model_revision)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
+             None if execution_ok is None else int(execution_ok),
+             json.dumps({**evidence,"response_length":len(response),"repeat_index":repeat_index}),
+             time.time(),(get_model(model_id) or {}).get("revision","")))
+            conn.commit()
+            conn.close()
+            out.append({"run_id":run_id,"model_id":model_id,"benchmark_id":b.id,"category":b.category,"role":b.role,
+                        "pass":passed,"score":score,"latency_ms":latency,"execution_ok":execution_ok,
+                        "evidence":{**evidence,"repeat_index":repeat_index}})
     return out
 
 def results(model_id=None,limit=200):
