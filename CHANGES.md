@@ -1,3 +1,9 @@
+## Phase 4 — UX/workflow polish
+- Added a compact Goal → Plan → Generate → Validate → Review → Apply → Checkpoint → Git workflow indicator.
+- Added `/api/workflow/state` as a single evidence-based workflow snapshot for the UI.
+- Removed duplicate GitHub API route declarations that could cause ambiguous maintenance behavior.
+- Added regression coverage for unique GitHub routes and workflow UI wiring.
+
 # DreamCoder — change log
 
 ## Latest updates
