@@ -31,7 +31,54 @@ const evolveInput = document.getElementById("evolveInput");
 
 function updateLines() {
   const count = editor.value.split("\n").length || 1;
-  lineNumbers.textContent = Array.from({ length: count }, (_, i) => i + 1).join("\n");
+  const total = Math.max(1, Math.min(count, 200000));
+  lineNumbers.textContent = Array.from({ length: total }, (_, i) => i + 1).join("\n");
+}
+
+let liveAnalysisTimer = null;
+let lastLiveAnalysisCode = "";
+
+async function requestLiveEditorAnalysis() {
+  const code = editor?.value || "";
+  if (!code.trim()) {
+    lastLiveAnalysisCode = "";
+    return;
+  }
+  if (code === lastLiveAnalysisCode) return;
+  lastLiveAnalysisCode = code;
+
+  try {
+    const data = await api("/api/ai/suggest", {
+      method: "POST",
+      body: JSON.stringify({
+        model: modelSelect?.value || "Local Model",
+        language: "python",
+        code,
+        selection: code.substring(editor.selectionStart, editor.selectionEnd),
+        filename: currentPath || "main.py",
+        use_cache: true,
+      }),
+    });
+
+    if (!data || !Array.isArray(data.suggestions)) return;
+    renderSuggestions(data.suggestions.slice(0, 3));
+    renderInsights(data.architecture_insights || []);
+    renderHealth(data.health || {}, data.latency_ms, data.cached);
+    if (document.getElementById("analysisDrawer")?.classList.contains("open")) {
+      const summary = data.suggestions?.[0]?.title ? `${data.suggestions[0].title} · ${data.latency_ms}ms` : "Live analysis updated";
+      document.getElementById("analysisSummaryDrawer").textContent = summary;
+    }
+    setStatus(`Live analysis: ${data.latency_ms}ms`);
+  } catch (_) {
+    setStatus("Live analysis waiting…");
+  }
+}
+
+function scheduleLiveEditorAnalysis() {
+  clearTimeout(liveAnalysisTimer);
+  liveAnalysisTimer = setTimeout(() => {
+    requestLiveEditorAnalysis();
+  }, 750);
 }
 
 function syncStatus() {
@@ -271,12 +318,14 @@ setInterval(saveEditorRecovery,1500);
 editor.addEventListener("input", () => {
   updateLines();
   syncStatus();
-  setStatus("Modified · syncing…");
+  setStatus("Modified · live analysis…");
+  scheduleLiveEditorAnalysis();
   scheduleLiveSave();
 });
 editor.addEventListener("click", syncStatus);
 editor.addEventListener("keyup", syncStatus);
 updateLines();
+setTimeout(() => requestLiveEditorAnalysis(), 300);
 
 document.getElementById("termClear").onclick = () => setTerminal("$ ");
 
