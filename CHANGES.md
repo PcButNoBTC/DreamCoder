@@ -1,6 +1,7 @@
 # DreamCoder — change log
 
 ## Latest updates
+- Hardened terminal WebSocket routing so desktop/browser sessions derive the `ws`/`wss` endpoint from the configured DreamCoder API base instead of assuming `hostname:8000`.
 - Fixed the generation build path so missing Docker/Podman sandbox runtime no longer turns a valid generated project into a hard failure.
 - Added the suggestion review flow with Apply / Preview / Ignore actions to make AI recommendations feel like reviewable project decisions rather than opaque output.
 - Refreshed the product positioning so DreamCoder is framed as an AI creation engine for building software from goals, not just as a prompt shell.
