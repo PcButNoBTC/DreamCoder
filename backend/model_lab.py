@@ -147,9 +147,23 @@ async def evaluator_summary(model_id, router, evaluator_model="Local Model"):
             "and measured results remain authoritative.\\n\\n"+json.dumps(p))
     try:
         result=await router.chat(evaluator_model,ChatContext(message=prompt,mode="analysis"))
-        return {"ok":True,"evaluator_model":evaluator_model,"summary":result.content}
+        summary=str(result.content)
+        conn=_conn()
+        conn.execute("INSERT INTO model_evaluations(model_id,evaluator_model,profile_json,summary,created_at) VALUES(?,?,?,?,?)",
+                     (model_id,evaluator_model,json.dumps(p),summary,time.time()))
+        conn.commit(); conn.close()
+        return {"ok":True,"evaluator_model":evaluator_model,"summary":summary,"measured_eligibility":p["eligibility"]}
     except Exception as exc:
         return {"ok":False,"evaluator_model":evaluator_model,"error":str(exc)}
 
 def benchmark_catalog():
     return [asdict(b) for b in BENCHMARKS]
+
+def evaluations(model_id=None, limit=100):
+    conn=_conn()
+    if model_id:
+        rows=conn.execute("SELECT * FROM model_evaluations WHERE model_id=? ORDER BY id DESC LIMIT ?",(model_id,limit)).fetchall()
+    else:
+        rows=conn.execute("SELECT * FROM model_evaluations ORDER BY id DESC LIMIT ?",(limit,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
