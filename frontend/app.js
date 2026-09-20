@@ -8,28 +8,37 @@ function resolveApiBase() {
   const explicit = window.DREAMCODER_API && String(window.DREAMCODER_API).trim();
   if (explicit) return explicit.replace(/\/$/, "");
 
-  const host = String(window.location.hostname || "");
+  const params = new URLSearchParams(window.location.search || "");
+  const queryApi = params.get("api");
+  if (queryApi) {
+    try {
+      const parsed = new URL(queryApi, window.location.href);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        const value = parsed.href.replace(/\/$/, "");
+        window.DREAMCODER_API = value;
+        return value;
+      }
+    } catch (_) {}
+  }
+
+  const host = String(window.location.hostname || "").toLowerCase();
   const port = String(window.location.port || "");
   const origin = String(window.location.origin || "");
+  const localHosts = ["127.0.0.1", "localhost", "0.0.0.0", "::1"];
+  const isLocalHost = localHosts.includes(host);
+  const isStaticFrontend = isLocalHost && ["8001", "3000"].includes(port);
+  const isGithubPages = host.endsWith(".github.io");
+  const isFileShell = window.location.protocol === "file:";
 
-  const isStaticFrontendShell = ["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port);
-  const preferred = [
-    "http://127.0.0.1:8000",
-    "http://localhost:8000",
-    "http://0.0.0.0:8000",
-  ];
-
-  if (isStaticFrontendShell) return preferred[0];
-
-  const candidates = [
-    origin,
-    ...preferred,
-  ];
-  const filtered = [...new Set(candidates.filter(Boolean))];
-  for (const candidate of filtered) {
-    if (candidate && candidate !== "null" && candidate !== "undefined") return candidate.replace(/\/$/, "");
+  if (isStaticFrontend || isGithubPages || isFileShell) {
+    return "http://127.0.0.1:8000";
   }
-  return "http://127.0.0.1:8000";
+
+  if (port === "8000") return origin.replace(/\/$/, "");
+
+  return origin && origin !== "null" && origin !== "undefined"
+    ? origin.replace(/\/$/, "")
+    : "http://127.0.0.1:8000";
 }
 
 const API_BASE = resolveApiBase();
