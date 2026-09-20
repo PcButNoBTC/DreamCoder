@@ -1363,6 +1363,9 @@ async def api_generate_project_build(req: GenerateProjectBuildRequest):
     if not req.files:
         raise HTTPException(400, "No generated files supplied")
 
+    # Snapshot before applying generated output so the user can roll back the generation.
+    checkpoint = create_checkpoint(str(workspace.root()), f"before generation: {req.name or 'generated-app'}")
+
     written = []
     for item in req.files:
         path = str(item.get("path") or "").strip()
@@ -1399,6 +1402,11 @@ async def api_generate_project_build(req: GenerateProjectBuildRequest):
     else:
         validation = {"ok":True,"exit_code":0,"stdout":"No compiler-specific build step for this stack; files were materialized.","stderr":""}
 
+    test_command = db.get_setting("project_test_command","")
+    test_result = None
+    if validation.get("ok") and test_command:
+        test_result = sandbox_run(str(workspace.root()), str(test_command), timeout=300, network=os.getenv("DREAMCODER_AGENT_NETWORK","0")=="1") if sandbox_available() else {"ok":False,"exit_code":-1,"stderr":"Sandbox runtime required for test validation"}
+
     sync = {"ok": False, "skipped": True, "reason": "disabled"}
     if req.sync_github and github_sync.enabled:
         sync = await github_sync.sync_files(
@@ -1413,6 +1421,9 @@ async def api_generate_project_build(req: GenerateProjectBuildRequest):
         "file_count": len(written),
         "build_command": command,
         "validation": validation,
+        "tests": test_result,
+        "checkpoint": checkpoint,
+        "rollback_available": bool(checkpoint),
         "github": sync,
     }
 
