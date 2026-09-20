@@ -1,4 +1,9 @@
-from backend.generation.orchestrator import _files, _language, _pick
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parents[1] / "backend"))
+
+from generation.orchestrator import _files, _language, _pick
 
 
 def test_language_detection():
