@@ -1,6 +1,9 @@
 # DreamCoder — change log
 
 ## Latest updates
+- Hardened production readiness so optional GitHub/AI/workspace/sandbox integrations report as degraded capabilities instead of making the core API appear unhealthy.
+- Locked the audit log to owner-only permissions and expanded redaction for AWS access keys and private-key blocks.
+- Added regression coverage for production readiness and audit-store security.
 - Hardened terminal WebSocket routing so desktop/browser sessions derive the `ws`/`wss` endpoint from the configured DreamCoder API base instead of assuming `hostname:8000`.
 - Fixed the generation build path so missing Docker/Podman sandbox runtime no longer turns a valid generated project into a hard failure.
 - Added the suggestion review flow with Apply / Preview / Ignore actions to make AI recommendations feel like reviewable project decisions rather than opaque output.
