@@ -31,3 +31,11 @@
 - sandbox failures are handled as warnings when the runtime is absent instead of blocking the generated app
 - local provider fallback remains cautious and avoids silently hard-coding unreachable backends
 - suggestion actions remain explicit and reviewable, reducing confusion during live editing
+
+
+## Model Lab + benchmark-driven routing
+- Added evidence-backed Model Lab and Model Registry for task-specific model selection.
+- Added repeatable benchmark cases, compact evidence storage, role profiles, and deterministic evidence routing.
+- Added advisory local-model evaluator summaries that cannot override measured eligibility.
+- Added Model Lab APIs and frontend panel for registry inspection and benchmark runs.
+- Generation can automatically use an evidence-backed generation model when one is eligible; otherwise it preserves the requested model.
