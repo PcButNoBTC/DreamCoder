@@ -26,12 +26,39 @@ def set_root(root: str) -> dict[str, Any]:
     return status()
 
 
+def _detect_default_root() -> Path | None:
+    """Use the repo root when no explicit workspace is configured."""
+    candidates: list[Path] = []
+    current = Path.cwd().resolve()
+    while True:
+        candidates.append(current)
+        if (current / "backend").exists() and (current / "frontend").exists() and (current / "README.md").exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    for candidate in candidates:
+        if (candidate / "backend").exists() and (candidate / "frontend").exists() and (candidate / "README.md").exists():
+            return candidate
+    return None
+
+
 def root() -> Path | None:
     value = db.get_setting("workspace_root", "")
-    if not value:
-        return None
-    p = Path(value).expanduser().resolve()
-    return p if p.exists() and p.is_dir() else None
+    if value:
+        p = Path(value).expanduser().resolve()
+        if p.exists() and p.is_dir():
+            repo_root = _detect_default_root()
+            if repo_root is not None and p != repo_root:
+                # Keep the app anchored to the project root rather than stale temp/test paths.
+                db.set_setting("workspace_root", str(repo_root))
+                return repo_root
+            return p
+    detected = _detect_default_root()
+    if detected is not None:
+        db.set_setting("workspace_root", str(detected))
+    return detected
 
 
 def _run(args: list[str], timeout: int = 30) -> dict[str, Any]:

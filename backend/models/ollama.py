@@ -1,8 +1,8 @@
 """Ollama adapter – talks to a local Ollama server (http://localhost:11434).
 
 Install Ollama and pull a model, e.g.:
-    ollama pull qwen2.5-coder:7b
-Then set DREAMCODER_MODEL=ollama:qwen2.5-coder:7b
+    ollama pull tinyllama:latest
+Then set DREAMCODER_MODEL=ollama:tinyllama:latest
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ class OllamaModel(BaseModel):
 
     def __init__(
         self,
-        model_name: str = "qwen2.5-coder:7b",
+        model_name: str = "tinyllama:latest",
         base_url: str = "http://localhost:11434",
         timeout: float = 60.0,
     ):
@@ -35,7 +35,7 @@ class OllamaModel(BaseModel):
             os.getenv("OLLAMA_MODEL")
             or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
             or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
-            or "qwen2.5-coder:7b"
+            or "tinyllama:latest"
         )
         self.model_name = resolved_model
         resolved_base = (

@@ -14,7 +14,7 @@ from pathlib import Path
 from html import escape as escape_html
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -898,7 +898,9 @@ async def api_list_files():
 
 
 @app.get("/api/files/{path:path}")
-async def api_get_file(path: str):
+async def api_get_file(path: str, request: Request):
+    if path == "stat":
+        return await file_stat(request.query_params.get("path", ""))
     f = router.index.get_file(path)
     if not f:
         raise HTTPException(404, "File not found in index")

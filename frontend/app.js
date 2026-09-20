@@ -187,7 +187,8 @@ async function loadAvailableModels() {
     }
     const validPrevious = [...modelSelect.options].some((o) => o.value === previous);
     const firstReal = [...modelSelect.options].find((o) => o.dataset.real === "true");
-    modelSelect.value = validPrevious ? previous : (firstReal?.value || "mock");
+    const preferredLocal = [...modelSelect.options].find((o) => o.value === "Local Model" || o.value.startsWith("ollama:"));
+    modelSelect.value = validPrevious ? previous : (preferredLocal?.value || firstReal?.value || "mock");
     modelCurrent.textContent = modelSelect.value;
     localStorage.setItem("dc_model", modelSelect.value);
     await refreshModelHealth();

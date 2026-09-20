@@ -143,11 +143,25 @@ def build_lanes_from_env() -> list[Lane]:
         model = os.getenv(model_key, "").strip()
         if url and model:
             lanes.append(Lane(name, "ollama", url, model, 90.0, weight))
-    if os.getenv("DREAMCODER_OLLAMA_LOCAL_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
-        url = os.getenv("DREAMCODER_OLLAMA_LOCAL_URL", "").strip()
-        model = os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL", "").strip() or os.getenv("OLLAMA_MODEL", "").strip()
-        if url and model:
-            lanes.append(Lane("local-ollama", "ollama", url, model, 90.0, 5))
+
+    default_local_url = os.getenv("DREAMCODER_OLLAMA_LOCAL_URL", "").strip() or os.getenv("OLLAMA_BASE_URL", "").strip() or "http://127.0.0.1:11434"
+    default_local_model = (
+        os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL", "").strip()
+        or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL", "").strip()
+        or os.getenv("OLLAMA_MODEL", "").strip()
+        or "tinyllama"
+    )
+    local_ollama_up = False
+    if default_local_url:
+        try:
+            resp = httpx.get(default_local_url.rstrip("/") + "/api/tags", timeout=2.0)
+            local_ollama_up = resp.status_code == 200
+        except Exception:
+            local_ollama_up = False
+    if os.getenv("DREAMCODER_OLLAMA_LOCAL_ENABLED", "false").lower() in {"1", "true", "yes", "on"} or local_ollama_up:
+        if default_local_url and default_local_model:
+            lanes.append(Lane("local-ollama", "ollama", default_local_url, default_local_model, 90.0, 5))
+
     if os.getenv("HF_TOKEN") and os.getenv("DREAMCODER_HF_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes", "on"}:
         model = os.getenv("HF_MODEL", "").strip()
         if model:
