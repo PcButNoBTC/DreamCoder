@@ -34,6 +34,7 @@ from project_memory import memory
 from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
 from security import capabilities
 from credentials import status as credential_status, get_secret as get_credential, available as credentials_available
+from censys import discover_working_ollama_models
 import github_auth, git_workflow
 from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
@@ -153,6 +154,12 @@ class OllamaHostRequest(BaseModel):
 class OllamaPrimaryRequest(BaseModel):
     url: str
     model: str
+
+class OllamaDiscoveryRequest(BaseModel):
+    query: str = 'services.software.product:"Ollama" and port:11434'
+    page: int = 1
+    per_page: int = 10
+    max_hosts: int = 10
 
 class WorkspaceRequest(BaseModel):
     root: str
@@ -505,6 +512,25 @@ async def ollama_set_primary(req: OllamaPrimaryRequest):
 @app.get("/api/ollama/primary")
 async def ollama_get_primary():
     return {"url":db.get_setting("ollama_primary_url",os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL","")),"model":db.get_setting("ollama_primary_model",os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL",""))}
+
+@app.post("/api/ollama/discover")
+async def ollama_discover(req: OllamaDiscoveryRequest):
+    try:
+        return await discover_working_ollama_models(
+            query=req.query,
+            page=req.page,
+            per_page=req.per_page,
+            max_hosts=req.max_hosts,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+@app.get("/api/ollama/discover")
+async def ollama_discover_get(query: str = 'services.software.product:"Ollama" and port:11434', page: int = 1, per_page: int = 10, max_hosts: int = 10):
+    try:
+        return await discover_working_ollama_models(query=query, page=page, per_page=per_page, max_hosts=max_hosts)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 @app.get("/api/quota")
 async def quota():

@@ -68,3 +68,44 @@ def test_list_models_prefers_ollama_when_configured(monkeypatch):
 
     assert models[0]["provider"] == "ollama"
     assert models[0]["id"] == "Local Model"
+
+
+def test_ollama_model_uses_primary_url_when_configured(monkeypatch):
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.setenv("DREAMCODER_OLLAMA_PRIMARY_URL", "http://185.216.203.106:11434")
+    monkeypatch.setenv("DREAMCODER_OLLAMA_PRIMARY_MODEL", "qwen2.5-coder:7b")
+
+    model = OllamaModel("qwen2.5-coder:7b")
+
+    assert model.base_url == "http://185.216.203.106:11434"
+    assert model.model_name == "qwen2.5-coder:7b"
+
+
+def test_public_search_fallback_discovery_without_censys_credentials(monkeypatch):
+    monkeypatch.delenv("CENSYS_API_ID", raising=False)
+    monkeypatch.delenv("CENSYS_API_SECRET", raising=False)
+
+    class FakeResponse:
+        status_code = 200
+        text = '<a href="http://8.8.8.8:11434">Ollama</a><a href="http://example.com:11434">Ollama</a>'
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url):
+            return FakeResponse()
+
+    import censys
+    monkeypatch.setattr(censys.httpx, "AsyncClient", FakeClient)
+
+    hosts = asyncio.run(censys.query_public_ollama_hosts())
+
+    assert "http://8.8.8.8:11434" in hosts
+    assert "http://example.com:11434" in hosts

@@ -2702,6 +2702,35 @@ async function validateAndLoadOllama(){
   const url=document.getElementById("ollamaUrlInput")?.value?.trim();if(!url){toast("Enter a URL","info");return;}
   try{const data=await api("/api/ollama/validate",{method:"POST",body:JSON.stringify({url})});renderOllamaModels(data);toast(data.model_count+" models loaded","success");}catch(err){toast("Validation failed: "+err.message,"error");}
 }
+
+async function discoverOllamaHosts(){
+  try{
+    const data=await api("/api/ollama/discover",{method:"POST",body:JSON.stringify({query:'services.software.product:"Ollama" and port:11434',page:1,per_page:10,max_hosts:10})});
+    renderDiscoveredOllamaHosts(data);
+    const count=(data.hosts||[]).filter(h=>h.status==="ready").length;
+    if(count){toast(count+" working Ollama host(s) discovered","success");}
+    else toast("No working public Ollama hosts found","info");
+  }catch(err){toast("Censys discovery failed: "+err.message,"error");}
+}
+
+function renderDiscoveredOllamaHosts(data){
+  const box=document.getElementById("ollamaDiscoverList");if(!box)return;box.innerHTML="";
+  const hosts=(data.hosts||[]).filter(h=>h.status==="ready");
+  if(!hosts.length){box.textContent="No public hosts validated yet.";return;}
+  hosts.forEach((host)=>{
+    const row=document.createElement("button");
+    row.className="hf-item";
+    const recommended=host.recommended_model||"";
+    row.innerHTML='<span class="hf-id">'+escapeHtml(host.url)+(recommended?" ★":"")+'</span><span class="hf-meta">'+escapeHtml((host.available_models||[]).slice(0,3).join(", ") || "No models")+' · '+(host.model_count||0)+' models</span>';
+    row.onclick=()=>{
+      document.getElementById("ollamaUrlInput").value = host.url;
+      renderOllamaModels({url:host.url,models:(host.models||[]),recommended:recommended?{name:recommended}:null});
+      toast("Host selected: "+host.url,"info");
+    };
+    box.appendChild(row);
+  });
+}
+
 function renderOllamaModels(data){
   const box=document.getElementById("ollamaModelList");if(!box)return;box.innerHTML="";const recommended=data.recommended?.name||"";
   (data.models||[]).forEach(m=>{const row=document.createElement("button");row.className="hf-item";row.innerHTML='<span class="hf-id">'+escapeHtml(m.name)+(m.name===recommended?" ★":"")+'</span><span class="hf-meta">'+escapeHtml(m.parameter_size||"?")+" · "+escapeHtml(m.quantization||"?")+" · score "+m.score+'</span>';row.onclick=()=>setPrimaryOllama(data.url,m.name);box.appendChild(row);});
@@ -2798,6 +2827,7 @@ visionDrop?.addEventListener("drop", (e) => {
 });
 document.getElementById("visionAnalyzeBtn")?.addEventListener("click", analyzeVision);
 document.getElementById("ollamaValidateBtn")?.addEventListener("click", validateAndLoadOllama);
+document.getElementById("ollamaDiscoverBtn")?.addEventListener("click", discoverOllamaHosts);
 
 // Paste image anywhere in app
 document.addEventListener("paste", (e) => {

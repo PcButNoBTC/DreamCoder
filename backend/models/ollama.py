@@ -31,8 +31,20 @@ class OllamaModel(BaseModel):
         base_url: str = "http://localhost:11434",
         timeout: float = 60.0,
     ):
-        self.model_name = model_name
-        self.base_url = (os.getenv("OLLAMA_BASE_URL") or base_url).rstrip("/")
+        resolved_model = model_name or (
+            os.getenv("OLLAMA_MODEL")
+            or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
+            or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
+            or "qwen2.5-coder:7b"
+        )
+        self.model_name = resolved_model
+        resolved_base = (
+            os.getenv("OLLAMA_BASE_URL")
+            or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
+            or os.getenv("DREAMCODER_OLLAMA_LOCAL_URL")
+            or base_url
+        )
+        self.base_url = str(resolved_base).rstrip("/")
         self.timeout = timeout
 
     async def complete(self, context: CodeContext) -> InferenceResult:

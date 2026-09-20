@@ -274,11 +274,14 @@ Type a command and press Enter (runs on the machine hosting the backend).
 
 <section class="card" id="ollamaCard" data-ai-panel="panel-models">
           <div class="card-head"><span>🦙 Ollama Endpoints</span><span class="badge">PRIMARY</span></div>
-          <div class="muted" style="margin-bottom:6px">Add a host URL you own or have permission to use. Models will be ranked by suitability.</div>
+          <div class="muted" style="margin-bottom:6px">Add a host URL you own or have permission to use, or discover public Ollama hosts from Censys and choose a validated model.</div>
           <div class="evolve-input-row" style="margin-bottom:6px">
             <input id="ollamaUrlInput" class="evolve-input" style="min-height:28px;max-height:28px" placeholder="http://your-ollama-host:11434" />
             <button id="ollamaValidateBtn" class="btn" style="height:28px;padding:0 10px">Load</button>
+            <button id="ollamaDiscoverBtn" class="btn" style="height:28px;padding:0 10px">Discover</button>
           </div>
+          <div class="muted" style="margin-bottom:6px">Censys query: services.software.product:"Ollama" and port:11434</div>
+          <div id="ollamaDiscoverList" class="hf-list muted" style="margin-bottom:8px">No public hosts discovered yet.</div>
           <div id="ollamaModelList" class="hf-list muted">No host loaded yet.</div>
         </section>
 
