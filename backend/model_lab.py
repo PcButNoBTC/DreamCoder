@@ -133,5 +133,18 @@ def route(role,candidates=None):
         if option["eligible"] and option["score"]>0: return {**option,"source":"benchmark_evidence"}
     return {"model_id":None,"role":role,"score":0.0,"eligible":False,"source":"no_evidence"}
 
+async def evaluator_summary(model_id, router, evaluator_model="Local Model"):
+    p=profile(model_id)
+    from models.base import ChatContext
+    prompt=("Analyze this structured benchmark profile for model routing. "
+            "Do not invent measurements. Summarize strengths, evidence gaps, and "
+            "appropriate roles. The evaluator is advisory; deterministic eligibility "
+            "and measured results remain authoritative.\\n\\n"+json.dumps(p))
+    try:
+        result=await router.chat(evaluator_model,ChatContext(message=prompt,mode="analysis"))
+        return {"ok":True,"evaluator_model":evaluator_model,"summary":result.content}
+    except Exception as exc:
+        return {"ok":False,"evaluator_model":evaluator_model,"error":str(exc)}
+
 def benchmark_catalog():
     return [asdict(b) for b in BENCHMARKS]
