@@ -1,85 +1,157 @@
 # DreamCoder
 
-DreamCoder is a local-first AI development studio that combines a browser-based IDE, project indexing, multi-provider model routing, workspace automation, and GitHub-aware project workflows in one environment.
+DreamCoder is an AI-native creation engine for software projects. It combines a browser-based IDE, a FastAPI backend, project indexing, multi-model reasoning, live suggestions, and safe self-healing workflows so a user can move from idea → project → validation → refinement with less friction.
 
-It is designed to behave like a practical AI-native coding workspace rather than a single prompt shell. The backend exposes a real FastAPI API, the frontend serves a working browser UI, and the app can use Ollama, Hugging Face, OpenAI-compatible providers, or offline mock mode.
+The app is designed to act like a practical AI software teammate, not just a shell for one prompt. It can reason about a live workspace, evaluate the right model for the task, propose code changes, apply safe insertions, and support a generation/repair loop that keeps the project moving.
 
-## What DreamCoder is
+## What DreamCoder already does
 
-- a browser UI in [frontend/](frontend/)
-- a Python FastAPI backend in [backend/](backend/)
-- local project indexing and symbol awareness
-- model selection and routing across Ollama, Hugging Face, and OpenAI-compatible APIs
-- AI-powered suggestions, chat, folder analysis, and code-generation flows
-- project agent workflows with validation and checkpointing
-- GitHub sync and workspace-aware project automation
-- a desktop wrapper in [electron/](electron/)
+- browser IDE experience in [frontend/](frontend/)
+- Python backend in [backend/](backend/)
+- workspace indexing and project context extraction
+- multi-provider model routing across Ollama, Hugging Face, and OpenAI-compatible APIs
+- live suggestions with apply/preview/ignore interactions
+- folder analysis and project-level recommendations
+- project generation and build validation workflows
+- checkpointing, sync hooks, and safe editor recovery
+- optional GitHub integration and agent-style review flows
 
-> DreamCoder turns natural-language intent into a planned, reviewed, validated, and repairable software workflow.
+> The goal is not just “chat with AI” — it is to build a system that helps create, inspect, validate, and improve software while staying grounded in the actual project.
+
+---
+
+## Why this is the right direction
+
+The biggest project-development win with AI is not a large single prompt. It is a loop:
+
+1. understand the project
+2. propose a next move
+3. inspect the exact file / context
+4. apply or preview a change
+5. validate it
+6. keep a memory of decisions and outcomes
+
+That loop makes AI useful for everything from a tiny utility to a full product. The app is already aligned with this structure.
+
+---
+
+## How to make project development easier with AI
+
+DreamCoder becomes far more useful when it behaves like a system, not a toy assistant.
+
+### 1. Goal-first project creation
+
+Every project should begin with a concrete mission: “build an app”, “refactor this backend”, “make this tool faster”, “generate a dashboard”, “create a CLI for X”. The AI should turn that goal into:
+
+- a project structure
+- a tech stack recommendation
+- a likely file layout
+- a task plan
+- validation steps
+- rollback checkpoints
+
+### 2. Whole-project understanding
+
+The app should analyze the whole folder, not just the current file. That means:
+
+- file graph and dependency awareness
+- symbol / module / API recognition
+- repeated patterns across the codebase
+- architecture suggestions based on actual project shape
+- high-value recommendations before edits are made
+
+### 3. Multi-model reasoning
+
+Different tasks need different models:
+
+- code generation for a specific feature
+- reasoning about architecture or refactors
+- summarization and project explanation
+- validation and test generation
+- bug repair loops
+
+The project should rank or route models by task, not always default to one model for everything.
+
+### 4. Human review loops
+
+AI should propose, not silently impose. A strong creation system has:
+
+- Apply / Preview / Ignore actions
+- approval gates for larger changes
+- diff previews before mutation
+- automatic rollback when the result fails
+- human confirmation for risky edits
+
+### 5. Safe execution and validation
+
+A creation system must validate each result in a running context:
+
+- compile or run generated code
+- run tests when possible
+- catch failure signals early
+- repair broken outputs using the actual error trace
+- preserve a rollback point before applying big changes
+
+### 6. Persistent project memory
+
+The system becomes far more useful if it remembers:
+
+- project goals
+- architecture decisions
+- recurring patterns
+- prior fixes and failed approaches
+- which models worked best for which kind of task
+
+This turns the assistant from a one-off prompt engine into a project collaborator.
+
+---
+
+## What would make DreamCoder truly great for creating anything
+
+If the project is meant to be a general creation engine, it should support more than just coding tasks. It should become a workflow for turning intention into working artifacts.
+
+### Ideal creation loop
+
+1. prompt or goal
+2. project / folder context
+3. architecture selection
+4. generation or scaffolding
+5. validation and failure repair
+6. iteration with feedback
+7. save / sync / checkpoint / share
+
+### Potential product scope
+
+DreamCoder can support:
+
+- web apps and landing pages
+- CLI tools and scripts
+- APIs and backend services
+- data dashboards and analytics tools
+- internal enterprise tooling
+- automation workflows
+- prototypes and experiments
+- learning tools and educational projects
+- small game loops, simulations, and utilities
+
+The central principle is simple: if a user can describe a desired outcome, the system should help convert that outcome into working project structure, code, tests, and refinements.
 
 ---
 
 ## Current status
 
-The project is already functional as a local AI coding workspace with:
+The project already behaves like a local AI coding workspace with:
 
 - backend startup on port 8000
-- frontend serving on port 8001
-- model routing with real provider detection
-- dynamic local fallback logic without forcing dead Ollama instances
-- Hugging Face token discovery and catalog-based model selection
-- launcher scripts that detect and start Ollama automatically
-- GitHub sync, workspace checkpointing, and local recovery tools
-- agent/project workflows and approval-based execution
+- frontend served locally
+- model selection and live provider fallback
+- Ollama awareness and fallback behavior
+- Hugging Face token and catalog support
+- build generation with validation and safe fallback when sandbox runtime is unavailable
+- suggestion previews and review actions
+- agent-style project workflows and project indexing
 
-This is no longer only a concept demo; it is a working local app scaffold with real backend and model integration paths.
-
----
-
-## Core capabilities
-
-### Multi-model routing
-
-DreamCoder can route tasks through the correct model provider instead of hard-coding one model for everything.
-
-Supported model sources:
-
-- Ollama
-- Hugging Face
-- OpenAI-compatible APIs
-- offline/mock mode
-
-### Project-aware analysis
-
-The app indexes files, extracts symbols, and keeps project context available for:
-
-- code suggestions
-- folder analysis
-- fix recommendations
-- generation planning
-- project understanding across files
-
-### Build → test → repair loop
-
-The generation engine is designed to:
-
-1. generate specialist output
-2. integrate it into the project
-3. review the result
-4. validate or build it
-5. capture failures
-6. repair using diagnostics
-7. re-validate before presenting the result
-
-### Workspace and GitHub automation
-
-DreamCoder includes support for:
-
-- file indexing and save flows
-- workspace root configuration
-- Git status / diff / branch support
-- GitHub OAuth and sync hooks
-- local checkpoint and recovery workflows
+This is no longer only a prototype. It is an active foundation for a much broader AI creation environment.
 
 ---
 
@@ -87,24 +159,11 @@ DreamCoder includes support for:
 
 ### Windows
 
-From the repository root:
-
 ```bat
 start_dreamcoder_windows.bat
 ```
 
-The launcher is designed to:
-
-- detect whether Ollama is installed
-- install Ollama if it is missing
-- start the local Ollama server
-- pull the default model
-- fall back to Hugging Face when configured
-- launch the backend and frontend automatically
-
 ### Manual setup
-
-Create and activate a virtual environment:
 
 ```bash
 python -m venv .venv
@@ -112,97 +171,47 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Start the backend:
+Start backend:
 
 ```bash
 cd backend
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-Start the frontend in another terminal:
+Start frontend:
 
 ```bash
 cd frontend
 python -m http.server 8001
 ```
 
-Then open:
+Open:
 
 ```text
 http://127.0.0.1:8001/index.html
 ```
 
-API docs are available at:
+API docs:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-If the app looks offline, open the browser console and set the API base if needed:
-
-```js
-window.DREAMCODER_API = "http://127.0.0.1:8000";
-location.reload();
-```
-
 ---
 
-## Provider details
+## Provider notes
 
 ### Ollama
 
-Use Ollama for local coding models, such as:
-
-```text
-ollama:qwen2.5-coder:7b
-ollama:tinyllama
-```
-
-The local launcher and runtime logic now attempt to ensure the Ollama server is running before the app treats the local backend as ready.
+Local models can be used through Ollama when the server is reachable.
 
 ### Hugging Face
 
-Hugging Face model IDs can be used directly in the provider pipeline, for example:
+HF model IDs are supported for real provider-backed behavior and can be selected from the app when available.
 
-```text
-hf:meta-llama/Llama-3.1-8B-Instruct
-meta-llama/Llama-3.1-8B-Instruct
-```
+### OpenAI-compatible
 
-### OpenAI-compatible endpoints
-
-OpenAI-compatible providers can be configured via environment variables and runtime settings when available.
-
----
-
-## Project vision and future potential
-
-This project has the potential to become more than a local assistant. Once finished, it could evolve into a full AI-native software studio that behaves more like a team of specialized coding agents than a single chatbot.
-
-### What it could become
-
-A completed DreamCoder could:
-
-- understand an entire repository rather than a single file
-- plan multi-step changes across a codebase
-- propose architectural refactors with context awareness
-- validate changes automatically and summarize results
-- keep persistent project memory and design decisions
-- work safely inside a local workspace with checkpoints and rollback
-- collaborate with GitHub workflows and issue-driven tasks
-- support agent-led project generation, test creation, and maintenance
-
-### Real-world impact
-
-The most ambitious version of this project could act as a local software engineer for individuals and small teams:
-
-- build features from a brief
-- refactor legacy code while preserving behavior
-- explain unfamiliar codebases quickly
-- generate tests, docs, and release notes
-- maintain a project without constant manual prompting
-
-That is the core promise of DreamCoder: a coding companion grounded in your project, safe in execution, and capable of evolving from helper to collaborator.
+OpenAI-compatible model endpoints can be used when configured through environment settings.
 
 ---
 
@@ -216,6 +225,7 @@ DreamCoder/
 │   ├── main.py
 │   ├── ai_router.py
 │   ├── analyzer.py
+│   ├── generator.py
 │   ├── workspace.py
 │   └── ...
 ├── frontend/
@@ -223,7 +233,10 @@ DreamCoder/
 ├── scripts/
 ├── README.md
 ├── CHANGES.md
+├── PRODUCTION.md
+├── SETUP.md
 ├── requirements.txt
+├── pytest.ini
 ├── start_dreamcoder_windows.bat
 ├── start_dreamcoder_no_credit.bat
 └── .gitignore
@@ -231,171 +244,16 @@ DreamCoder/
 
 ---
 
-## Validation
+## The path to an ideal AI creation platform
 
-The project includes backend tests for provider routing, local model fallbacks, and model-registration logic. A verified local run should keep the app working without silently forcing a dead Ollama instance.
+The best version of DreamCoder is not just an editor with a chatbot bolted on. It is a creation loop that can:
 
-The current state is intended for local development and rapid iteration, not as a guarantee of production-ready deployment without additional validation in the target environment.
-│   ├── ai_router.py      # model/provider routing
-│   ├── generator.py      # project generation integration
-│   ├── project_index.py  # project indexing/context
-│   └── ...
-├── frontend/             # browser IDE
-├── electron/             # desktop wrapper
-├── assets/               # DreamCoder branding
-├── scripts/              # helper scripts
-├── tests/                # automated tests
-├── requirements.txt
-├── pytest.ini
-├── SETUP.md
-├── CHANGES.md
-├── PRODUCTION.md
-└── README.md
-=======
-## Repository structure
+- understand an entire codebase
+- choose the right model for each task
+- make safe project changes
+- validate the result
+- explain what was done and why
+- learn from previous decisions
+- operate with checkpoints and approvals
 
-```text
-DreamCoder/
-├── backend/              # FastAPI API and app logic
-├── frontend/             # UI shell served locally
-├── electron/             # desktop wrapper
-├── scripts/              # helper tooling
-├── requirements.txt      # Python dependencies
-├── README.md             # project overview and roadmap
-├── CHANGES.md            # recent project changes
-├── PRODUCTION.md         # production-focused guidance
-├── SETUP.md              # setup notes
-├── pytest.ini            # test config
-├── start_dreamcoder_windows.bat
-├── start_dreamcoder_no_credit.bat
-└── ...
->>>>>>> 0f01169 (Refresh README and project vision)
-```
-
----
-
-<<<<<<< HEAD
-## 🎨 Branding
-
-The project logo is available at:
-
-**`assets/dreamcoder-logo.svg`**
-
-The GitHub/README banner is:
-
-**`assets/dreamcoder-banner.svg`**
-
-The logo is designed to work as the project's primary visual identity, while the banner is intended for GitHub, documentation, and project presentations.
-=======
-## Typical workflow
-
-1. Start the backend.
-2. Start the frontend.
-3. Pick a provider from the selector.
-4. Open a workspace or project folder.
-5. Use suggestions, chat, analysis, or the agent.
-6. Review and approve changes when needed.
-7. Sync or manage project files via GitHub if configured.
->>>>>>> 0f01169 (Refresh README and project vision)
-
----
-
-## 🧭 Current development direction
-
-<<<<<<< HEAD
-DreamCoder has moved beyond the initial orchestration foundation. The next phase is focused on making the system reliable under real project workloads.
-
-### Immediate priorities
-=======
-This project is designed to run locally. The backend is the source of truth, and the frontend is only the interface. If the browser shows offline or unreachable, make sure the backend is up on port 8000 and the frontend is served from the correct static directory.
-
-Use:
->>>>>>> 0f01169 (Refresh README and project vision)
-
-1. Run the complete repository test suite in a properly provisioned environment.
-2. Exercise real multi-model generation flows.
-3. Verify Ollama/Hugging Face/provider routing.
-4. Inject build/test failures and verify concrete repair behavior.
-5. Verify workspace checkpoints and rollback.
-6. Inspect generated diffs for preservation of existing project code.
-7. Add/strengthen CI coverage.
-8. Improve patch-based incremental generation.
-9. Add generation job status and streaming progress.
-10. Improve provider reliability, cancellation, retries, and observability.
-
-### Longer-term direction
-
-The larger goal is an AI-native development environment where DreamCoder can:
-
-```text
-Understand project
-      ↓
-Plan change
-      ↓
-Select specialists
-      ↓
-Generate targeted changes
-      ↓
-Integrate
-      ↓
-Review
-      ↓
-Build / test
-      ↓
-Repair
-      ↓
-Show diff
-      ↓
-Apply / rollback
-```
-
-<<<<<<< HEAD
-That means DreamCoder becomes more than a code generator: it becomes a **development loop around the entire project**.
-
----
-
-## 🛡️ Development philosophy
-
-DreamCoder is designed around a few principles:
-
-- **Model-agnostic** — use the models available to you.
-- **Capability-driven** — match work to model strengths.
-- **Project-aware** — understand the codebase before changing it.
-- **Validation-first** — generated code must face real checks.
-- **Repairable** — failures become inputs to the next attempt.
-- **Recoverable** — checkpoints provide a safety boundary.
-- **Incremental** — prefer targeted changes over unnecessary regeneration.
-- **Human-controlled** — the developer remains in charge of applying and shipping changes.
-
----
-
-## 📌 Project status
-
-DreamCoder is an **active development project**.
-
-The multi-model generation foundation, task graph, capability routing, integration/review stages, validation/repair loop, incremental context, checkpointing, and generation UI are implemented on `main`.
-
-The next milestone is to validate those systems against real projects and harden the implementation based on observed failures.
-
----
-
-## 📄 License
-
-See the repository's license file for the current licensing terms.
-
----
-
-<p align="center">
-  <img src="assets/dreamcoder-logo.svg" alt="DreamCoder logo" width="96">
-</p>
-
-<p align="center">
-  <strong>DreamCoder</strong><br>
-  <em>Build bigger. Together.</em>
-</p>
-=======
-This repo is intended to be a real local AI development environment rather than a static mock-up.
-
-
-This repo is intended to be run locally as a functional AI development environment with real backend services behind it.
->>>>>>> 0f01169 (Refresh README and project vision)
+That is the difference between a useful assistant and a real creation system.

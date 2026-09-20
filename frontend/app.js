@@ -536,6 +536,7 @@ function renderSuggestions(suggestions) {
         <div class="actions">
           <button class="apply">Apply</button>
           <button class="preview">Preview</button>
+          <button class="ignore">Ignore</button>
         </div>
       </span>`;
     row.querySelector(".apply").onclick = (e) => {
@@ -552,16 +553,10 @@ function renderSuggestions(suggestions) {
         onApply: () => { insertSuggestion(s.code); toast("Suggestion applied", "success"); },
       });
     };
-    card.appendChild(row);
-  });
-}
-
-function renderInsights(insights) {
-  const card = document.getElementById("insightsCard");
-  card.querySelector(".card-head").innerHTML = `<span>App Structure</span><span>${insights.length}</span>`;
-  card.querySelectorAll(".insight").forEach((el) => el.remove());
-  insights.forEach((ins) => {
-    const div = document.createElement("div");
+    row.querySelector(".ignore").onclick = (e) => {
+      e.stopPropagation();
+      row.remove();
+      toast("Suggestion ignored", "info");
     div.className = "insight";
     div.innerHTML = `<span class="icon">${ins.icon || "•"}</span><div><strong>${escapeHtml(ins.title)}</strong><small>${escapeHtml(ins.detail || "")}</small></div>`;
     card.appendChild(div);
@@ -876,13 +871,12 @@ document.addEventListener("keydown", (e) => {
 })();
 
 /* ========== Multi-file buffer ========== */
-const fileBuffers = {
-  "src/main.py": editor.value,
-  "src/ai_router.py": "class AIRouter:\n    def get_model(self, name: str):\n        ...\n",
-  "src/suggestions.py": "# suggestions helpers\n",
-  "src/cache.py": "# cache layer\n",
-};
-let currentPath = "src/main.py";
+const fileBuffers = {};
+let currentPath = "";
+if (!editor.value.trim()) {
+  fileBuffers["untitled.py"] = "";
+  currentPath = "untitled.py";
+}
 
 document.querySelectorAll(".file[data-path]").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -2946,6 +2940,14 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
   let start = "panel-chat";
   try { start = localStorage.getItem("dc_ai_panel") || "panel-chat"; } catch (_) {}
   showAiPanel(start);
+
+  if (!currentPath) {
+    currentPath = "untitled.py";
+    fileBuffers[currentPath] = editor.value || "";
+    editor.value = fileBuffers[currentPath];
+    document.getElementById("projectNameLabel").textContent = "◈ untitled";
+  }
+  renderTabs();
 
   // Status
   const st = document.getElementById("status");

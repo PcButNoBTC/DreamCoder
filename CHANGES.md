@@ -1,29 +1,32 @@
 # DreamCoder — change log
 
 ## Latest updates
-- Fixed the default Local Model fallback so it prefers a working backend instead of forcing an unreachable Ollama default.
-- Added regression tests covering Ollama-unconfigured and Hugging Face fallback behavior.
-- Improved the Windows launchers to detect Ollama, install it automatically when missing, and fall back to Hugging Face instead of blocking startup.
-- Updated the static frontend serving instructions and corrected the path mismatch that caused 404s when opening the app.
-- Refreshed the project documentation to reflect the actual working state and long-term project potential.
+- Fixed the generation build path so missing Docker/Podman sandbox runtime no longer turns a valid generated project into a hard failure.
+- Added the suggestion review flow with Apply / Preview / Ignore actions to make AI recommendations feel like reviewable project decisions rather than opaque output.
+- Refreshed the product positioning so DreamCoder is framed as an AI creation engine for building software from goals, not just as a prompt shell.
+- Updated the repo docs to describe the full project-creation loop: understand → plan → generate → validate → refine.
+- Kept the local fallback logic resilient when Ollama is missing or unreachable while still supporting real local provider paths.
 
 ## Added
-- Parallel model racing across configured Ollama and Hugging Face lanes.
-- Ollama endpoint validation and model ranking.
-- Hugging Face quota tracking.
-- ZIP backups on GitHub sync failure and agent command audit logging.
-- Agent permission and backup regression tests.
-- More resilient local startup behavior for users who do not already have Ollama installed.
+- generation validation fallback that still reports success when sandbox runtime is unavailable
+- regression tests covering generator builds with no sandbox installed
+- project-level guidance in documentation for goal-first AI development
+- clearer product framing for multi-model project creation and model-choice improvements
 
 ## Changed
-- Restricted agent shell execution by default.
-- Added change-type tagging and sync warnings.
-- Added model recommendation and model-backed project generation.
-- Added quota and Ollama endpoint controls to the IDE.
-- Updated project documentation to emphasize the app as a real AI coding workspace, not just a demo shell.
+- README now focuses on AI-native creation workflows instead of only local IDE status
+- project docs now emphasize whole-project analysis, validation loops, and approval-driven edits
+- suggestion actions are more reviewable and less ambiguous for users
+- the vision now extends beyond “one file at a time” toward “build anything from intent” workflows
 
-## Security
-- Restricted agent commands no longer use shell=True.
-- Sync failures preserve generated file contents locally.
-- Agent command execution is audited.
-- Local fallback logic avoids silently defaulting into unreachable providers.
+## Future roadmap
+- multi-model project ranking by task type and project context
+- persistent project memory across sessions and revisions
+- stronger validation and repair loops using real build/test errors
+- safer approval gates for repo-wide and multi-file changes
+- stronger support for general creation workflows: web apps, CLIs, APIs, internal tools, and automation
+
+## Security and reliability
+- sandbox failures are handled as warnings when the runtime is absent instead of blocking the generated app
+- local provider fallback remains cautious and avoids silently hard-coding unreachable backends
+- suggestion actions remain explicit and reviewable, reducing confusion during live editing

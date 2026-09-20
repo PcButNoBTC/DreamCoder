@@ -40,7 +40,7 @@
       <aside class="files" id="explorerPanel">
         <div class="panel-title">EXPLORER</div>
         <div class="project-tabs" id="projectTabs"></div>
-        <div class="project-name" id="projectNameLabel">◈ dreamcoder-app</div>
+        <div class="project-name" id="projectNameLabel">◈ untitled</div>
         <div id="dropZone" class="drop-zone">
           <div class="drop-zone-inner">
             <div>📁 Drop a folder or files here</div>
@@ -53,45 +53,16 @@
           <button class="chip" id="browseFolderBtn" type="button">Open folder</button>
           <button class="chip" id="browseFilesBtn" type="button">Add files</button>
         </div>
-        <div id="fileTree">
-          <button class="file active">▾ src</button>
-          <button class="file indent active-file" data-path="src/main.py">◇ main.py</button>
-          <button class="file indent" data-path="src/ai_router.py">◇ ai_router.py</button>
-          <button class="file indent" data-path="src/suggestions.py">◇ suggestions.py</button>
-          <button class="file indent" data-path="src/cache.py">◇ cache.py</button>
-          <button class="file">▾ tests</button>
-          <button class="file indent" data-path="tests/test_main.py">◇ test_main.py</button>
-          <button class="file" data-path="requirements.txt">◇ requirements.txt</button>
-        </div>
+        <div id="fileTree" class="muted" style="padding:8px 10px; color: var(--muted);">No files open yet</div>
       </aside>
 
       <section class="editor-area">
         <div class="tabs" id="editorTabs">
-          <div class="tab active" data-tab-path="src/main.py">main.py <span class="tab-close" title="Close">×</span></div>
           <button type="button" class="tab tab-add" id="tabAdd" title="New tab">+</button>
         </div>
         <div class="editor-wrap">
           <div class="line-numbers" id="lineNumbers"></div>
-          <textarea id="editor" spellcheck="false">from dataclasses import dataclass
-from typing import Any
-
-@dataclass
-class CodeContext:
-    code: str
-    language: str = "python"
-    selection: str = ""
-
-class DreamCoder:
-    def __init__(self, model):
-        self.model = model
-
-    async def suggest(self, context: CodeContext) -> list[str]:
-        # Ask the model for focused, actionable improvements.
-        return await self.model.complete(context)
-
-if __name__ == "__main__":
-    app = DreamCoder(model="Llama-3.1-8B-Instruct")
-    print("DreamCoder ready")</textarea>
+          <textarea id="editor" spellcheck="false" placeholder="Start coding…"></textarea>
         </div>
         <div class="statusbar">
           <span>Ln 1, Col 1</span>
