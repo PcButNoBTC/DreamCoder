@@ -77,3 +77,7 @@ Each Project Hub project can keep role-specific routing preferences. `auto` uses
 ## Resource controls
 
 Benchmark execution is bounded by `DREAMCODER_MODEL_LAB_CONCURRENCY` (default 2) and `DREAMCODER_MODEL_LAB_TIMEOUT` (default 180 seconds). The benchmark runner uses the existing provider runtime and sandbox limits; networking remains disabled for executable benchmark checks.
+
+## Provider discovery
+
+`POST /api/models/discover` asks the existing AI router for currently available local/Hugging Face/OpenAI-compatible/Ollama models and registers their provider metadata. `GET /api/models/{model_id}/health` checks the selected adapter directly. This keeps registry state connected to the real provider adapters rather than treating registration as proof of availability.
