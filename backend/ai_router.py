@@ -12,7 +12,7 @@ from typing import Any, Optional
 import httpx
 
 from cache import SuggestionCache
-from hf_catalog import get_catalog
+from hf_catalog import CURATED, get_catalog
 from models import (
     BaseModel,
     ChatContext,
@@ -135,6 +135,20 @@ def _looks_like_local_format_model(name: str) -> bool:
     if not model:
         return False
     return any(marker in model for marker in _local_format_markers())
+
+
+def _canonical_model_id(name: str) -> str:
+    """Normalize model strings like 'hf:...' or 'HuggingFace/...' down to the raw model id."""
+    value = (name or "").strip()
+    if value.startswith("hf:"):
+        return value.split(":", 1)[1]
+    if value.lower().startswith("huggingface/"):
+        return value.split("/", 1)[1]
+    if value.startswith("ollama:"):
+        return value.split(":", 1)[1]
+    if value.startswith("openai:"):
+        return value.split(":", 1)[1]
+    return value
 
 
 def _local_ollama_model_for(name: str) -> Optional[OllamaModel]:
@@ -340,6 +354,98 @@ class AIRouter:
             return {"ok":False,"error":"No usable response from any lane","losers":[{"lane":l.lane.name,"reason":l.reason} for l in result.losers],"content":""}
         return {"ok":True,"content":result.winner.content,"winning_lane":result.winner.lane.name,"model":result.winner.lane.model,"duration_ms":result.duration_ms,"losers":[{"lane":l.lane.name,"reason":l.reason} for l in result.losers]}
 
+    def _chat_fallback_candidates(self, model_name: str) -> list[str]:
+        """Return a ranked list of chat-capable fallbacks for a model the provider rejected."""
+        current = _canonical_model_id(model_name)
+        candidates: list[str] = []
+
+        if _configured_ollama_base() or _ollama_server_available() or (os.getenv("DREAMCODER_LOCAL_BACKEND", "").lower() == "ollama"):
+            ollama_model = (
+                os.getenv("OLLAMA_MODEL")
+                or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
+                or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
+                or "tinyllama"
+            )
+            candidates.append(f"ollama:{ollama_model}")
+            candidates.append("Local Model")
+
+        for item in CURATED:
+            mid = (item.get("id") or "").strip()
+            if not mid or mid == current or _looks_like_local_format_model(mid):
+                continue
+            candidates.append(f"hf:{mid}")
+
+        # Prefer stable chat-capable models before falling back to generic catalog entries.
+        preferred = [
+            "hf:Qwen/Qwen2.5-Coder-7B-Instruct",
+            "hf:meta-llama/Llama-3.1-8B-Instruct",
+            "hf:mistralai/Mistral-7B-Instruct-v0.3",
+            "hf:deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct",
+        ]
+        for item in preferred:
+            if _canonical_model_id(item) == current:
+                continue
+            if item not in candidates:
+                candidates.append(item)
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            key = candidate.strip()
+            if key and key not in seen:
+                seen.add(key)
+                deduped.append(key)
+        return deduped
+
+    @staticmethod
+    def _is_provider_rejection(value: Any) -> bool:
+        """True when the model route is known to be refused or unavailable for chat."""
+        text = ""
+        if isinstance(value, Exception):
+            text = str(value)
+        elif isinstance(value, ChatResult):
+            text = str(value.content or "")
+        elif value is not None:
+            text = str(value)
+        if not text:
+            return False
+        lowered = text.lower()
+        markers = (
+            "401 unauthorized",
+            "unauthorized",
+            "forbidden",
+            "not currently available",
+            "not supported",
+            "unsupported",
+            "client error",
+            "provider route",
+            "refused",
+            "model is unavailable",
+            "model is not supported",
+            "could not load",
+        )
+        return any(marker in lowered for marker in markers)
+
+    async def _fallback_chat(self, original_name: str, context: ChatContext, reason: Any) -> ChatResult:
+        last_error = reason
+        for fallback_name in self._chat_fallback_candidates(original_name):
+            if fallback_name in {original_name, f"hf:{_canonical_model_id(original_name)}"}:
+                continue
+            try:
+                fallback_model = self.get_model(fallback_name)
+                provider = getattr(fallback_model, 'backend', None) or fallback_model.__class__.__name__
+                result = await provider_runtime.call(provider, lambda: fallback_model.chat(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
+                if result and not self._is_provider_rejection(result):
+                    if result.content and not result.content.startswith("[Fallback from "):
+                        result.content = f"[Fallback from {original_name}]\n{result.content}"
+                    return result
+            except Exception as exc:
+                last_error = exc
+                continue
+        if isinstance(last_error, Exception):
+            raise last_error
+        raise RuntimeError(str(last_error))
+
     async def chat(
         self,
         model_name: str,
@@ -358,7 +464,15 @@ class AIRouter:
             context.project_context = self._project_context()
         model = self.get_model(model_name)
         provider = getattr(model, 'backend', None) or model.__class__.__name__
-        return await provider_runtime.call(provider, lambda: model.chat(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
+        try:
+            result = await provider_runtime.call(provider, lambda: model.chat(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
+            if result and self._is_provider_rejection(result):
+                return await self._fallback_chat(model_name, context, result)
+            return result
+        except Exception as exc:
+            if self._is_provider_rejection(exc):
+                return await self._fallback_chat(model_name, context, exc)
+            raise
 
     def _project_context(self) -> str:
         files = self.index.list_files()

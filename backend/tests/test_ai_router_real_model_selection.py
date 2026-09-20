@@ -149,6 +149,17 @@ def test_huggingface_prefixed_model_name_routes_to_hf_adapter(monkeypatch):
     assert getattr(model, "model_id", "") == "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
 
 
+def test_chat_fallback_prefers_known_capable_model(monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "mock")
+
+    router = AIRouter()
+    candidates = router._chat_fallback_candidates("deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct")
+
+    assert "hf:Qwen/Qwen2.5-Coder-7B-Instruct" in candidates
+    assert "hf:deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct" not in candidates
+
+
 def test_list_models_prefers_ollama_when_configured(monkeypatch):
     monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "ollama")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
