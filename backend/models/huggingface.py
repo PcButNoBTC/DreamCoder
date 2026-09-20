@@ -125,6 +125,24 @@ class HuggingFaceModel(BaseModel):
 
         return proxies
 
+    @staticmethod
+    def _inference_base_url() -> str:
+        return (os.getenv("HF_INFERENCE_BASE_URL") or "https://router.huggingface.co/hf-inference").rstrip("/")
+
+    @staticmethod
+    def _router_base_url() -> str:
+        return (os.getenv("HF_ROUTER_BASE_URL") or "https://router.huggingface.co/v1").rstrip("/")
+
+    @staticmethod
+    def _is_network_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(marker in message for marker in (
+            "getaddrinfo failed", "name or service not known",
+            "nodename nor servname", "temporary failure in name resolution",
+            "network is unreachable", "connection refused", "connection reset",
+            "connecterror",
+        ))
+
     def _proxy_for_request(self, index: int = 0) -> Optional[str]:
         if not self.proxies:
             return None
@@ -207,6 +225,8 @@ class HuggingFaceModel(BaseModel):
                 return await fn(token=token, proxy=proxy, **kwargs)
             except Exception as exc:  # pragma: no cover - surfaced in final response
                 errors.append(str(exc))
+                if self._is_network_error(exc):
+                    break
                 continue
         if not self.api_tokens:
             raise RuntimeError("No HF tokens are configured. Set HF_TOKEN or HF_TOKEN_1/HF_TOKEN_2 ...")
@@ -260,7 +280,7 @@ class HuggingFaceModel(BaseModel):
         try:
             async with httpx.AsyncClient(**client_kwargs) as client:
                 resp = await client.post(
-                    f"https://api-inference.huggingface.co/models/{self.model_id}",
+                    f"{self._inference_base_url()}/models/{self.model_id}",
                     headers=headers,
                     json=payload,
                 )
@@ -303,7 +323,11 @@ class HuggingFaceModel(BaseModel):
         if context.mode == "analysis" or "Return ONLY" in prompt:
             prompt += "\n\nRespond with raw JSON only. No prose, no markdown fences."
         if not self.api_tokens:
-            return ChatResult(content=f"Selected model HuggingFace/{self.model_id} has no HF_TOKEN configured.", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
+            return ChatResult(
+                content=f"Selected model HuggingFace/{self.model_id} has no HF_TOKEN configured.",
+                latency_ms=int((time.perf_counter()-start)*1000),
+                model=f"HuggingFace/{self.model_id}", backend="huggingface"
+            )
 
         errors: list[str] = []
         for token_index, token in enumerate(self.api_tokens):
@@ -315,20 +339,44 @@ class HuggingFaceModel(BaseModel):
                     client_kwargs["proxy"] = proxy
                 async with httpx.AsyncClient(**client_kwargs) as client:
                     resp = await client.post(
-                        f"https://api-inference.huggingface.co/models/{self.model_id}",
-                        headers={"Authorization": f"Bearer {token}"},
-                        json={"inputs": prompt, "parameters": {"max_new_tokens": 1200, "temperature": 0.3, "return_full_text": False}},
+                        f"{self._router_base_url()}/chat/completions",
+                        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                        json={
+                            "model": self.model_id,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": 0.3,
+                            "max_tokens": 1200,
+                        },
                     )
                     _record_quota(dict(resp.headers), resp.status_code)
                     resp.raise_for_status()
                     data = resp.json()
-                    raw = data[0].get("generated_text", "") if isinstance(data, list) else str(data)
+                    raw = ""
+                    if isinstance(data, dict):
+                        choices = data.get("choices") or []
+                        if choices and isinstance(choices[0], dict):
+                            message = choices[0].get("message") or {}
+                            raw = message.get("content") or choices[0].get("text") or ""
                     return ChatResult(content=raw.strip() or "(empty model response)", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
             except Exception as exc:
                 errors.append(str(exc))
-                continue
+                if self._is_network_error(exc):
+                    break
 
-        return ChatResult(content=f"Selected model HuggingFace/{self.model_id} is unavailable across all configured HF tokens: {'; '.join(errors)}", latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
+        detail = errors[-1] if errors else "unknown error"
+        if errors and self._is_network_error(RuntimeError(detail)):
+            message = (
+                f"Hugging Face network/DNS error for {self.model_id}: {detail}. "
+                "The failure is independent of your HF token. Check DNS/proxy/VPN connectivity "
+                "or set HF_INFERENCE_BASE_URL/HF_ROUTER_BASE_URL to a reachable endpoint."
+            )
+        else:
+            message = (
+                f"Hugging Face model {self.model_id} is not currently available through the configured "
+                f"Inference Provider route: {detail}. This can mean the model is not served for chat "
+                "or the selected provider does not support it."
+            )
+        return ChatResult(content=message, latency_ms=int((time.perf_counter()-start)*1000), model=f"HuggingFace/{self.model_id}", backend="huggingface")
 
     def _build_chat_prompt(self, context: ChatContext) -> str:
         project = ""
@@ -344,6 +392,8 @@ class HuggingFaceModel(BaseModel):
             "mode": "api" if self.use_api else "local",
             "has_token": bool(self.api_tokens),
             "token_count": len(self.api_tokens),
+            "inference_base_url": self._inference_base_url(),
+            "router_base_url": self._router_base_url(),
         }
 
     def _build_prompt(self, ctx: CodeContext) -> str:
