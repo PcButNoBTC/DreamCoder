@@ -257,3 +257,22 @@ The best version of DreamCoder is not just an editor with a chatbot bolted on. I
 - operate with checkpoints and approvals
 
 That is the difference between a useful assistant and a real creation system.
+
+## Unified change engine
+
+
+DreamCoder now has the foundations of a durable change lifecycle:
+
+**Inspect → Plan → Contract → Patch → Review → Validate → Repair → Approve → Git**
+
+
+- ChangePlan provides a canonical, serializable change contract.
+- Existing-project agent writes use patch preconditions so stale files are rejected instead of silently overwritten.
+- Generation task dependencies now pass upstream artifact summaries to downstream specialists.
+- Generation results expose patch metadata and a ChangePlan record.
+- Persistent generation jobs provide job IDs, durable status, event history and cancellation.
+- Model/provider telemetry records latency and success/failure for explainable routing.
+- Project health exposes evidence-based workspace, Git, test-discovery and project signals.
+- Production CORS defaults to local DreamCoder origins and can be configured with DREAMCODER_CORS_ORIGINS.
+
+See docs/ARCHITECTURE_NEXT.md and docs/ROADMAP_EXPANDED.md.
