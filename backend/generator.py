@@ -874,6 +874,14 @@ def _gen_java(name: str, prompt: str, goal: str) -> list[dict[str, str]]:
     ]
 
 
+
+async def generate_project_with_model(prompt: str, project_goal: str = "", router=None) -> dict[str, Any]:
+    """Run the capability-routed task graph. Template generation remains the caller's fallback."""
+    if router is None:
+        raise ValueError("router is required for model generation")
+    from generation.orchestrator import orchestrate_generation
+    return await orchestrate_generation(prompt, project_goal, router)
+
 def self_heal(
     error_text: str,
     files: list[dict[str, str]],
