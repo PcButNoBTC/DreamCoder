@@ -53,3 +53,11 @@ The Python implementation benchmark is syntax-checked and, when a container runt
 ## Lifecycle
 
 Models move through practical states such as `candidate`, `eligible`, and `stale`. A new revision or materially changed provider configuration should be registered with a new revision and re-benchmarked before routing uses it.
+
+## Production lifecycle and observability
+
+Model registry mutations and benchmark/evaluator execution can be protected with `DREAMCODER_MODEL_LAB_ADMIN_TOKEN`. When configured, mutation requests must send `X-DreamCoder-Admin-Token`.
+
+Benchmark records retain the registered model revision so regressions can be compared across revisions. Evaluator summaries are stored separately from measured evidence and remain advisory.
+
+The observability endpoint exposes registry state, recent benchmark evidence, and evaluator summaries for dashboards and diagnostics.
