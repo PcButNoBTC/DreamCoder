@@ -78,9 +78,10 @@ app.add_middleware(
 
 router = AIRouter()
 db.init_db()
+github_auth.migrate_legacy_credentials()
 production_init()
 def refresh_github_runtime_state() -> dict[str, Any]:
-    token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','') or os.getenv('GITHUB_TOKEN','') or os.getenv('GH_TOKEN','') or os.getenv('GITHUB_APP_TOKEN','')
+    token=(get_credential('github_oauth_token') if credentials_available() else '') or os.getenv('GITHUB_TOKEN','') or os.getenv('GH_TOKEN','') or os.getenv('GITHUB_APP_TOKEN','')
     repo=db.get_setting('github_repo', os.getenv('DREAMCODER_GITHUB_REPO','')).strip()
     branch=db.get_setting('github_branch', os.getenv('DREAMCODER_GITHUB_BRANCH','main')).strip() or 'main'
     enabled=str(os.getenv('DREAMCODER_GITHUB_AUTOSYNC','true')).lower() not in {'0','false','no','off'}
@@ -94,7 +95,7 @@ def refresh_github_runtime_state() -> dict[str, Any]:
         os.environ['DREAMCODER_GITHUB_BRANCH']=branch
     return github_sync.apply_runtime_state(repo=repo or github_sync.repo, branch=branch, token=token, enabled=enabled)
 
-_stored_github_token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','')
+_stored_github_token=(get_credential('github_oauth_token') if credentials_available() else '')
 if _stored_github_token:
     os.environ['GITHUB_TOKEN']=_stored_github_token
     github_sync.token=os.environ['GITHUB_TOKEN']
@@ -366,7 +367,7 @@ async def github_select_repository(body: dict):
         repo=repo,
         branch=branch,
         token=(get_credential("github_oauth_token") if credentials_available() else "")
-        or db.get_setting("github_oauth_token", "")
+       
         or os.getenv("GITHUB_TOKEN", "")
         or os.getenv("GH_TOKEN", "")
         or os.getenv("GITHUB_APP_TOKEN", ""),
@@ -418,7 +419,7 @@ async def github_oauth_callback(code:str="",state:str=""):
         github_sync.apply_runtime_state(
             repo=db.get_setting("github_repo", os.getenv("DREAMCODER_GITHUB_REPO","")),
             branch=db.get_setting("github_branch", os.getenv("DREAMCODER_GITHUB_BRANCH","main")),
-            token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
+            token=(get_credential("github_oauth_token") if credentials_available() else "") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
         )
         return HTMLResponse("<script>window.close()</script><h3>DreamCoder connected to GitHub. You can close this window.</h3>")
     except Exception as exc:
@@ -431,7 +432,7 @@ async def github_oauth_refresh():
         github_sync.apply_runtime_state(
             repo=db.get_setting("github_repo", os.getenv("DREAMCODER_GITHUB_REPO","")),
             branch=db.get_setting("github_branch", os.getenv("DREAMCODER_GITHUB_BRANCH","main")),
-            token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
+            token=(get_credential("github_oauth_token") if credentials_available() else "") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
         )
     return d
 

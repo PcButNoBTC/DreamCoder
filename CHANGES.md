@@ -1,3 +1,10 @@
+## Launch completion pass
+- Added explicit reversible SQLite migrations and a migration/rollback CLI.
+- Hardened GitHub OAuth/App token handling so OAuth credentials require the OS keychain instead of SQLite fallback storage.
+- Hardened autonomous execution with non-root containers, read-only root filesystems, dropped capabilities, no-new-privileges, resource limits, isolated tmpfs, and explicit network policy.
+- Expanded browser E2E coverage for the visible creation workflow.
+- Kept release validation/signing and multi-platform packaging in the release workflow, with artifact manifests and provenance attestation.
+
 ## Phase 4 — UX/workflow polish
 - Added a compact Goal → Plan → Generate → Validate → Review → Apply → Checkpoint → Git workflow indicator.
 - Added `/api/workflow/state` as a single evidence-based workflow snapshot for the UI.
