@@ -3056,3 +3056,42 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
 if(window.dreamcoderDesktop?.onUpdateReady){
  window.dreamcoderDesktop.onUpdateReady(info=>{if(confirm("DreamCoder "+(info?.version||"")+" is ready. Restart to install?"))window.dreamcoderDesktop.installUpdate();});
 }
+
+
+/* Phase 4: visible creation workflow — keeps the user's next action obvious. */
+(function workflowBar(){
+  const steps = [
+    ["goal","Goal"],["plan","Plan"],["generate","Generate"],["validate","Validate"],
+    ["review","Review"],["apply","Apply"],["checkpoint","Checkpoint"],["git","Git"]
+  ];
+  const style=document.createElement("style");
+  style.textContent=".dc-workflow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:7px 10px;margin:0 0 8px;border:1px solid var(--border);border-radius:9px;background:var(--panel,#111722);font-size:12px}.dc-workflow-title{font-weight:700;margin-right:3px}.dc-workflow-step{border:1px solid var(--border);border-radius:999px;padding:4px 8px;color:var(--muted);cursor:default}.dc-workflow-step.done{color:var(--text);border-color:var(--accent2,#58d68d)}.dc-workflow-step.current{border-color:var(--accent);color:var(--text);box-shadow:0 0 0 1px var(--accent) inset}";
+  document.head.appendChild(style);
+  const shell=document.querySelector(".app-shell");
+  if(!shell) return;
+  const bar=document.createElement("div");
+  bar.className="dc-workflow";
+  bar.innerHTML='<span class="dc-workflow-title">Workflow</span>'+steps.map(([id,label])=>'<span class="dc-workflow-step" data-workflow="'+id+'">'+label+'</span>').join("");
+  const workspaceEl=shell.querySelector(".workspace");
+  shell.insertBefore(bar,workspaceEl||shell.firstChild);
+  async function refresh(){
+    try{
+      const data=await api("/api/workflow/state");
+      const state=data.steps||{};
+      let current=false;
+      for(const [id] of steps){
+        const el=bar.querySelector('[data-workflow="'+id+'"]');
+        const done=Boolean(state[id]);
+        el.classList.toggle("done",done);
+        el.classList.remove("current");
+        if(!done && !current){el.classList.add("current");current=true;}
+        el.title=done?"Completed / available":"Next recommended step";
+      }
+      bar.querySelector(".dc-workflow-title").title=data.goal||"Set a project goal to begin";
+    }catch(_){
+      bar.querySelector(".dc-workflow-title").title="Workflow status unavailable";
+    }
+  }
+  refresh();
+  setInterval(refresh,10000);
+})();
