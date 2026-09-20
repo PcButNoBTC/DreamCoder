@@ -70,8 +70,13 @@ MIGRATIONS: list[Migration] = [
 def _ensure_table(conn):
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations "
-        "(version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at REAL NOT NULL)"
+        "(version INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '', applied_at REAL NOT NULL)"
     )
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(schema_migrations)").fetchall()}
+    if "name" not in columns:
+        conn.execute("ALTER TABLE schema_migrations ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+    if "applied_at" not in columns:
+        conn.execute("ALTER TABLE schema_migrations ADD COLUMN applied_at REAL NOT NULL DEFAULT 0")
 
 
 def current_version(conn) -> int:
