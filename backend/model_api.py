@@ -2,6 +2,7 @@
 from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 import os
+import model_lab as _model_lab_impl
 from pydantic import BaseModel, Field
 import model_lab
 
@@ -90,6 +91,7 @@ async def observability():
         "registry": model_lab.list_models(),
         "recent_results": model_lab.results(limit=100),
         "evaluations": model_lab.evaluations(limit=50),
+        "resource_limits": {"benchmark_concurrency": _model_lab_impl._BENCHMARK_CONCURRENCY, "benchmark_timeout_seconds": _model_lab_impl._BENCHMARK_TIMEOUT},
     }
 
 @router.get("/api/models/repeatability")
