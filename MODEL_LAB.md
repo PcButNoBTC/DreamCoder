@@ -73,3 +73,7 @@ The safe suite now covers structured planning, Python and TypeScript implementat
 ## Project-level routing controls
 
 Each Project Hub project can keep role-specific routing preferences. `auto` uses measured evidence and the router; `pinned` records an explicit model choice for that project role. Pinned choices are project configuration, not a replacement for benchmark evidence elsewhere.
+
+## Resource controls
+
+Benchmark execution is bounded by `DREAMCODER_MODEL_LAB_CONCURRENCY` (default 2) and `DREAMCODER_MODEL_LAB_TIMEOUT` (default 180 seconds). The benchmark runner uses the existing provider runtime and sandbox limits; networking remains disabled for executable benchmark checks.
