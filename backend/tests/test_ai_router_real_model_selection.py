@@ -112,6 +112,32 @@ def test_hf_repo_model_id_does_not_fall_back_to_mock(monkeypatch):
     assert getattr(model, "model_id", "") == "TroyDoesAI/Unrestricted-Knowledge-Will-Not-Refuse-15B"
 
 
+def test_local_format_model_ids_are_not_routed_to_hf_api(monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf-test-token")
+    monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "mock")
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.delenv("DREAMCODER_OLLAMA_PRIMARY_URL", raising=False)
+
+    router = AIRouter()
+    model = router.get_model("TheBloke/Llama-3.1-8B-Instruct-GGUF")
+
+    assert isinstance(model, HuggingFaceModel)
+    assert getattr(model, "use_api", True) is False
+
+
+def test_local_format_model_ids_prefer_ollama_when_configured(monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf-test-token")
+    monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "ollama")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+
+    router = AIRouter()
+    model = router.get_model("mlx-community/Qwen2.5-Coder-7B-Instruct-MLX")
+
+    assert isinstance(model, OllamaModel)
+    assert getattr(model, "model_name", "") == "qwen2.5-coder:7b"
+
+
 def test_list_models_prefers_ollama_when_configured(monkeypatch):
     monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "ollama")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
