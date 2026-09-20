@@ -3134,3 +3134,25 @@ if(window.dreamcoderDesktop?.onUpdateReady){
   document.getElementById("dcLabRefresh").onclick=render;
   document.getElementById("dcLabBench").onclick=async()=>{if(!selectedModel)return;await api("/api/models/benchmarks/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model_id:selectedModel})});await render()};
 })();
+
+/* Orchestration task graph — persistent multi-role execution view. */
+(function taskGraphUI(){
+  const b=document.createElement("button"); b.className="chip"; b.textContent="◇ Task Graph";
+  b.style.cssText="position:fixed;right:360px;bottom:12px;z-index:9999";
+  document.body.appendChild(b);
+  const box=document.createElement("section"); box.style.cssText="position:fixed;inset:10vh 12vw;z-index:11002;background:#0d121a;border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 100px #000b;padding:16px;overflow:auto;display:none";
+  document.body.appendChild(box);
+  async function render(){
+    const projects=await api("/api/projects").catch(()=>[]);
+    if(!projects.length){box.innerHTML="<h3>Task Graph</h3><p>No Project Hub projects yet.</p>";return;}
+    const p=projects[0];
+    const data=await api("/api/projects/"+encodeURIComponent(p.id)+"/tasks").catch(()=>({tasks:[]}));
+    const tasks=data.tasks||[];
+    box.innerHTML="<div style='display:flex;gap:8px;align-items:center'><h3 style='margin:0'>Task Graph · "+escapeHtml(p.name)+"</h3><span style='flex:1'></span><button id='tgPlan'>Plan / assign</button><button id='tgClose'>×</button></div>"+
+      "<p class='muted'>Each task is assigned by role evidence when available; otherwise the existing capability router remains the fallback.</p>"+
+      "<div>"+tasks.map(t=>"<div style='border:1px solid var(--border);border-radius:8px;padding:9px;margin:7px 0'><b>"+escapeHtml(t.title)+"</b> · "+escapeHtml(t.role)+"<br><span class='muted'>"+escapeHtml(t.status)+" · "+escapeHtml(t.model_id||"unassigned")+"</span></div>").join("")+"</div>";
+    box.querySelector("#tgClose").onclick=()=>box.style.display="none";
+    box.querySelector("#tgPlan").onclick=async()=>{await api("/api/projects/"+encodeURIComponent(p.id)+"/tasks/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});await render();};
+  }
+  b.onclick=()=>{box.style.display="block";render();};
+})();
