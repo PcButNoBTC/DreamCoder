@@ -43,7 +43,7 @@ async def start_generation_job(body: JobRequest):
         project_event(project["id"],"generation.started","orchestrator",request.get("model",""),{"safeguard_model":body.safeguard_model,"independent_review":review,"routing":routing,"selected_model":selected_model})
         from generator import generate_project_with_model
         request["model"]=selected_model
-        result=await generate_project_with_model(request["prompt"],request.get("goal",""),router=ai_router)
+        result=await generate_project_with_model(request["prompt"],request.get("goal",""),router=ai_router,model=request.get("model",selected_model))
         project_event(project["id"],"generation.completed","orchestrator",request.get("model",""),
                       {"file_count":result.get("file_count",0),"repair_count":result.get("repair_count",0)})
         set_project_status(project["id"],"generated",assessment.level)
