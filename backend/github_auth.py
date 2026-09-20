@@ -6,6 +6,21 @@ import httpx
 import jwt
 import db
 from credentials import set_secret,get_secret,delete_secret,available
+def migrate_legacy_credentials():
+    """Move legacy SQLite OAuth secrets into the OS keychain when possible."""
+    if not available():
+        return {"ok": False, "migrated": []}
+    migrated = []
+    for name in ("github_oauth_token", "github_oauth_refresh_token", "github_app_installation_token"):
+        legacy = db.get_setting(name, "")
+        if legacy and not get_secret(name):
+            set_secret(name, legacy)
+            migrated.append(name)
+        if legacy:
+            db.set_setting(name, "")
+    return {"ok": True, "migrated": migrated}
+
+
 def _cfg():
     return {"client_id":os.getenv("DREAMCODER_GITHUB_CLIENT_ID",""),"client_secret":os.getenv("DREAMCODER_GITHUB_CLIENT_SECRET",""),"callback":os.getenv("DREAMCODER_GITHUB_CALLBACK","http://127.0.0.1:8000/api/github/oauth/callback"),"secret":os.getenv("DREAMCODER_OAUTH_STATE_SECRET","")}
 def configured(): c=_cfg(); return bool(c["client_id"] and c["client_secret"] and c["secret"])
@@ -55,7 +70,15 @@ async def repositories(installation_id=None):
     arr=d.get("repositories",d if isinstance(d,list) else [])
     return {"ok":True,"repositories":[{"full_name":x.get("full_name"),"private":x.get("private"),"default_branch":x.get("default_branch")} for x in arr]}
 def disconnect():
-    delete_secret("github_oauth_token") if available() else db.set_setting("github_oauth_token",""); db.set_setting("github_oauth_expires_at",""); os.environ.pop("GITHUB_TOKEN",None); return {"ok":True,"connected":False}
+    if available():
+        delete_secret("github_oauth_token")
+        delete_secret("github_oauth_refresh_token")
+        delete_secret("github_app_installation_token")
+    for name in ("github_oauth_token", "github_oauth_refresh_token", "github_app_installation_token"):
+        db.set_setting(name, "")
+    db.set_setting("github_oauth_expires_at", "")
+    os.environ.pop("GITHUB_TOKEN", None)
+    return {"ok": True, "connected": False}
 
 async def refresh():
     c=_cfg(); token=get_secret("github_oauth_refresh_token") if available() else ""
