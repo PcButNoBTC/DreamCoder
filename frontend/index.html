@@ -348,10 +348,31 @@ Type a command and press Enter (runs on the machine hosting the backend).
   <div id="toasts"></div>
   <div id="modalRoot"></div>
 
+  <script>
+    (function(){
+      if (!window.DREAMCODER_API) {
+        const host = String(window.location.hostname || "");
+        const port = String(window.location.port || "");
+        const isStaticShell = ["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port);
+        if (isStaticShell || host === "127.0.0.1" || host === "localhost" || host === "0.0.0.0") {
+          window.DREAMCODER_API = "http://127.0.0.1:8000";
+        }
+      }
+    })();
+  </script>
   <script src="app.js"></script>
 <script>
 (function(){
- const api=()=>window.DREAMCODER_API||"";
+ const api=()=>{
+   const explicit = window.DREAMCODER_API && String(window.DREAMCODER_API).trim();
+   if (explicit) return explicit.replace(/\/$/, "");
+   const host = String(window.location.hostname || "");
+   const port = String(window.location.port || "");
+   if (["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port)) {
+     return "http://127.0.0.1:8000";
+   }
+   return "http://127.0.0.1:8000";
+ };
  async function check(){try{const r=await fetch(api()+"/api/production/readiness");const d=await r.json();const el=document.getElementById("productionStatus");el.textContent=(d.ok?"Ready":"Needs configuration")+" · "+Object.entries(d.checks||{}).map(([k,v])=>k+":"+(v?"✓":"—")).join(" · ");document.getElementById("productionDetails").textContent=JSON.stringify(d,null,2)}catch(e){document.getElementById("productionStatus").textContent="Backend diagnostics unavailable: "+e}}
  document.getElementById("productionCheckBtn")?.addEventListener("click",check);
  document.getElementById("checkpointBtn")?.addEventListener("click",async()=>{try{const r=await fetch(api()+"/api/workspace/checkpoint",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason:"manual-ui"})});const d=await r.json();document.getElementById("productionStatus").textContent=d.ok?"Checkpoint created: "+d.path:JSON.stringify(d)}catch(e){document.getElementById("productionStatus").textContent=String(e)}});

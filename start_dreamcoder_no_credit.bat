@@ -5,41 +5,43 @@ set "ROOT=%~dp0"
 set "BACKEND_DIR=%ROOT%backend"
 
 REM -----------------------------------------------------------------------------
-REM DreamCoder Windows launcher
+REM DreamCoder local/no-credit launcher
 REM -----------------------------------------------------------------------------
-REM Edit these values if needed before running.
+REM Prefer local open-source models via Ollama instead of paid credit-based APIs.
 set "DREAMCODER_LOCAL_BACKEND=ollama"
 set "OLLAMA_BASE_URL=http://localhost:11434"
 set "OLLAMA_MODEL=qwen2.5-coder:7b"
 set "DREAMCODER_OLLAMA_PRIMARY_URL=http://localhost:11434"
 set "DREAMCODER_OLLAMA_PRIMARY_MODEL=qwen2.5-coder:7b"
+
+REM Optional GitHub settings
 set "GITHUB_TOKEN="
 set "DREAMCODER_GITHUB_REPO=PcButNoBTC/DreamCoder"
 set "DREAMCODER_GITHUB_BRANCH=main"
 set "DREAMCODER_GITHUB_AUTOSYNC=true"
 
-REM Optional GitHub OAuth values
-REM set "DREAMCODER_GITHUB_CLIENT_ID="
-REM set "DREAMCODER_GITHUB_CLIENT_SECRET="
-REM set "DREAMCODER_OAUTH_STATE_SECRET="
-REM set "DREAMCODER_GITHUB_CALLBACK=http://127.0.0.1:8000/api/github/oauth/callback"
-
-REM Start the FastAPI backend
+REM Start backend
 start "DreamCoder Backend" cmd /k "cd /d ""%BACKEND_DIR%"" && python -m uvicorn main:app --host 0.0.0.0 --port 8000"
 
-REM Small pause so the backend can start before the frontend opens
+REM Pause briefly to allow the API time to bind.
 ping 127.0.0.1 -n 4 > nul
 
-REM Serve the frontend on port 8001
+REM Start frontend static shell
 start "DreamCoder Frontend" cmd /k "cd /d ""%ROOT%"" && python -m http.server 8001 --directory ""%ROOT%"""
 
-REM Open the app in the default browser
+REM Open browser
 start "" "http://127.0.0.1:8001/frontend/index.html"
 
-echo DreamCoder started.
+echo DreamCoder local/no-credit launcher started.
+echo.
+echo If Ollama is not running yet, install/start it and pull a model:
+echo   ollama pull qwen2.5-coder:7b
+
+echo Then start the app and select the local provider in the model selector.
+echo.
 echo Backend: http://127.0.0.1:8000
 echo Frontend: http://127.0.0.1:8001/frontend/index.html
-echo.
+
 echo If the page still shows offline, open DevTools and run:
 echo   window.DREAMCODER_API = "http://127.0.0.1:8000";
 echo   location.reload();

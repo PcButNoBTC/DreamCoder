@@ -60,14 +60,34 @@
     </section>
   </div>
   <script>
+    (function(){
+      if (!window.DREAMCODER_API) {
+        const host = String(window.location.hostname || "");
+        const port = String(window.location.port || "");
+        const isStaticShell = ["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port);
+        if (isStaticShell || host === "127.0.0.1" || host === "localhost" || host === "0.0.0.0") {
+          window.DREAMCODER_API = "http://127.0.0.1:8000";
+        }
+      }
+    })();
+
     const API = (() => {
       const explicit = window.DREAMCODER_API && String(window.DREAMCODER_API).trim();
       if (explicit) return explicit.replace(/\/$/, "");
-      const candidates = [window.location.origin, "http://127.0.0.1:8000", "http://localhost:8000", "http://0.0.0.0:8000"];
+
+      const host = String(window.location.hostname || "");
+      const port = String(window.location.port || "");
+      const defaultBackends = ["http://127.0.0.1:8000", "http://localhost:8000", "http://0.0.0.0:8000"];
+
+      if (["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port)) {
+        return defaultBackends[0];
+      }
+
+      const candidates = [window.location.origin, ...defaultBackends];
       for (const candidate of candidates) {
         if (candidate && candidate !== "null" && candidate !== "undefined") return candidate.replace(/\/$/, "");
       }
-      return "http://localhost:8000";
+      return "http://127.0.0.1:8000";
     })();
     const clientLog = [];
     function log(msg) {

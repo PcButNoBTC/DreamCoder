@@ -7,17 +7,29 @@ window.addEventListener("error", (e) => {
 function resolveApiBase() {
   const explicit = window.DREAMCODER_API && String(window.DREAMCODER_API).trim();
   if (explicit) return explicit.replace(/\/$/, "");
-  const candidates = [
-    window.location.origin,
+
+  const host = String(window.location.hostname || "");
+  const port = String(window.location.port || "");
+  const origin = String(window.location.origin || "");
+
+  const isStaticFrontendShell = ["127.0.0.1", "localhost", "0.0.0.0"].includes(host) && ["8001", "3000"].includes(port);
+  const preferred = [
     "http://127.0.0.1:8000",
     "http://localhost:8000",
     "http://0.0.0.0:8000",
+  ];
+
+  if (isStaticFrontendShell) return preferred[0];
+
+  const candidates = [
+    origin,
+    ...preferred,
   ];
   const filtered = [...new Set(candidates.filter(Boolean))];
   for (const candidate of filtered) {
     if (candidate && candidate !== "null" && candidate !== "undefined") return candidate.replace(/\/$/, "");
   }
-  return "http://localhost:8000";
+  return "http://127.0.0.1:8000";
 }
 
 const API_BASE = resolveApiBase();

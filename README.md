@@ -1,312 +1,221 @@
 # DreamCoder
 
-**Your personal AI-native IDE** — code, prompt, stream, evolve, and query every model from one place.
+DreamCoder is a local AI-native development studio: a FastAPI backend plus a browser/Electron frontend for coding, project indexing, model-driven suggestions, folder analysis, project agents, and live GitHub sync.
 
-## GitHub Pages preview
+This repo is the real application code, not just a static demo shell. The frontend talks to a live backend on port 8000, and the backend can discover real model providers, inspect your workspace, run tooling, and push selected changes to GitHub.
 
-The frontend shell is published as a static site on GitHub Pages:
+## What this project really is
 
-https://pcbutnobtc.github.io/DreamCoder/
+DreamCoder combines:
 
-> The static site hosts the UI shell. The full project features still require a live backend API, typically on `http://localhost:8000` unless you point `window.DREAMCODER_API` at a remote backend.
+- a browser-based IDE shell in [frontend/](frontend/)
+- a Python FastAPI service in [backend/](backend/)
+- a local project index stored in SQLite
+- model routing for Ollama, HuggingFace, OpenAI-compatible APIs, and a mock/offline mode
+- project-level chat and folder analysis
+- an agent workflow with approval before applying changes
+- optional live GitHub autosync for the currently configured repo/branch
+- an Electron desktop wrapper in [electron/](electron/)
+
+The app is designed to run locally, with the backend serving the actual API and the frontend acting as the UI layer.
 
 ---
 
-## Quick start (browser)
+## Quick start
 
-### 1. Backend
+### 1. Install dependencies
+
 ```bash
-cd DreamCoder
+cd /path/to/DreamCoder
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+### 2. Start the backend
+
+```bash
 cd backend
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-### 2. Frontend
-Open `frontend/index.html` in a browser  
-(or `cd frontend && python -m http.server 3000` → http://localhost:3000)
+The backend should be reachable at:
 
----
+- http://127.0.0.1:8000
+- docs: http://127.0.0.1:8000/docs
 
-## Desktop app (Electron)
+### 3. Start the frontend
+
+There are two practical ways to open the UI:
+
+#### Option A: open the static frontend directly
 
 ```bash
-cd DreamCoder/electron
-npm install
-npm start
+cd frontend
+python -m http.server 8001
 ```
 
-This launches the UI in a native window and starts the Python backend automatically.
+Then open:
 
-Build installers:
-```bash
-npm run dist
+- http://127.0.0.1:8001/index.html
+
+#### Option B: use the bundled browser route with the backend
+
+The frontend uses `window.DREAMCODER_API` when present. If the page still shows offline or unreachable, open the browser console and run:
+
+```js
+window.DREAMCODER_API = "http://127.0.0.1:8000";
+location.reload();
 ```
+
+### Windows launcher
+
+A ready-to-use batch file is included at [start_dreamcoder_windows.bat](start_dreamcoder_windows.bat).
+
+Double-click it from Windows to launch:
+
+- backend on 127.0.0.1:8000
+- frontend on 127.0.0.1:8001
+- browser open to the app
 
 ---
 
-## What you can do
+## Core features
 
-| Action | How |
-|--------|-----|
-| **Run code** | ▶ Run or `Ctrl+Enter` — Python syntax check |
-| **Get suggestions** | ✦ Suggest or `Ctrl+Shift+S` |
-| **Ask all models** | ◈ Ask All or `Ctrl+Shift+A` — parallel suggestions from Llama, Qwen, DeepSeek, Mistral, Dolphin… |
-| **Stream completion** | ≋ Stream or `Ctrl+Shift+T` — token-by-token via WebSocket |
-| **Evolve the UI** | ✧ Evolve — describe a change, apply live patches without reload |
-| **Switch files** | Click files in the explorer (buffers stay in memory + SQLite index) |
-| **Themes** | Midnight / Graphite / Violet |
+### AI-powered coding workflow
 
----
+- code editor and terminal in the same local workspace
+- single-model suggestions and multi-model ask-all flows
+- run/test actions inside the IDE
+- project-aware chat and folder analysis
+- AI-generated patches and local project healing
 
-## Architecture
+### Project indexing
 
-```
-UI (browser / Electron)
-    │  HTTP + WebSocket
-    ▼
-FastAPI backend
-    ├── AIRouter → discovered Ollama / HuggingFace / OpenAI-compatible adapters
-    ├── SuggestionCache (LRU)
-    ├── ProjectIndex → SQLite (files + symbols)
-    ├── File watcher (watchdog or polling)
-    ├── /api/ai/suggest
-    ├── /api/ai/suggest-all   ← multi-model parallel
-    ├── /ws/complete         ← streaming tokens
-    ├── /api/ai/evolve
-    └── /api/history
-```
+The backend maintains a local project index in SQLite, including:
 
----
+- files discovered in the loaded workspace
+- code symbols for navigation and awareness
+- saved chat/project context
+- project state across app restarts
 
-## Persistent project index (SQLite)
+### Model routing
 
-- Location: `backend/data/dreamcoder.db`
-- Stores file contents, symbols (classes/functions/vars), and prompt history
-- Survives restarts
+DreamCoder can route to providers such as:
 
-### Watch a real folder
-```bash
-curl -X POST http://localhost:8000/api/watch \
-  -H "Content-Type: application/json" \
-  -d "{\"root\": \"C:/path/to/your/project\"}"
-```
-Index updates as you save files (watchdog if installed, else polling).
+- Ollama
+- Hugging Face
+- OpenAI-compatible APIs
+- mock/offline mode for local development
 
----
+The selected provider is surfaced in the UI and can be checked live from the model status indicator.
 
-## Real models (optional)
+### GitHub sync
 
-### Ollama
-```bash
-ollama pull llama3.1:8b
-set OLLAMA_MODEL=llama3.1:8b
-```
-DreamCoder discovers the models actually served by Ollama and puts them in the IDE selector as `ollama:<tag>`. It no longer silently falls back to a mock response when Ollama is offline. Set `OLLAMA_BASE_URL` if Ollama is not on localhost.
+GitHub sync is optional but supported for direct repo mirroring from the running backend.
 
-### Hugging Face API
-```bash
-set HF_TOKEN=hf_xxx
-set HF_MODEL=meta-llama/Llama-3.1-8B-Instruct
-```
-
----
-
-## API surface
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/api/ai/suggest` | Single-model suggestions |
-| POST | `/api/ai/suggest-all` | Parallel multi-model |
-| WS | `/ws/complete` | Token streaming |
-| POST | `/api/ai/evolve` | Live UI patches |
-| POST | `/api/run` | Syntax check |
-| GET/POST | `/api/files…` | Indexed files |
-| POST | `/api/watch` | Start folder watcher |
-| GET | `/api/history` | Past prompts |
-| GET | `/api/health` | Status + DB stats |
-
----
-
-## Project layout
-
-```
-DreamCoder/
-├── frontend/          # IDE UI
-├── backend/
-│   ├── main.py        # FastAPI + WebSocket
-│   ├── ai_router.py
-│   ├── db.py          # SQLite
-│   ├── project_index.py
-│   ├── watcher.py
-│   ├── cache.py
-│   ├── data/          # dreamcoder.db (created at runtime)
-│   └── models/        # Mock, Ollama, HuggingFace
-├── electron/          # Desktop shell
-├── scripts/
-└── requirements.txt
-```
-
----
-
-## Keyboard shortcuts
-
-| Keys | Action |
-|------|--------|
-| `Ctrl+Enter` | Run |
-| `Ctrl+Shift+S` | Suggest |
-| `Ctrl+Shift+A` | Ask all models |
-| `Ctrl+Shift+T` | Stream |
-| `Ctrl+E` | Focus Evolve |
-
----
-
-Built to be the IDE you live in: prompt any model, stream completions, keep your index on disk, and evolve the UI from inside the app.
-
----
-
-## Project context, Live Monitor & Folder Analysis
-
-### Project context
-In the AI panel, set:
-- **Goal** – what this repo is for (guides every AI reply)
-- **Default command** – optional run command for the project
-
-Click **Save context**.
-
-### Live Monitor (side chat)
-Always-on panel that:
-- Shows project pulse (files, symbols, goal)
-- Answers questions about the project or coding in general
-- Offers next-step ideas
-- Can trigger analysis from chat (“Analyze the folder…”)
-
-Chips: About project · Ideas · Analyze · Next steps
-
-### Folder Analysis
-Click **◎ Analyze** (toolbar) or ask the monitor to analyze.
-Returns:
-- Project-level recommendations aligned to your goal
-- Per-file scores, issues, and improvement ideas
-- Overall health %
-
-API:
-- `GET/POST /api/project/context`
-- `POST /api/ai/chat`
-- `GET /api/ai/monitor`
-- `POST /api/ai/analyze-folder`
-
-## Project-level agent runtime
-
-DreamCoder now exposes a project-scoped agent loop at `/api/agent`.
-
-The runtime separates **planning → approval → tool execution → validation → repair state → diff review** and persists runs, events, and tool calls in SQLite. The agent works inside an explicit workspace boundary and does not receive an unrestricted shell primitive.
-
-### Run an agent task
+Typical environment variables:
 
 ```bash
-curl -X POST http://localhost:8000/api/agent/run \
-  -H "Content-Type: application/json" \
-  -d '{"goal":"Fix the failing tests and explain the change","cwd":"/path/to/project","auto_apply":false}'
+export GITHUB_TOKEN="..."
+export DREAMCODER_GITHUB_REPO="PcButNoBTC/DreamCoder"
+export DREAMCODER_GITHUB_BRANCH="main"
+export DREAMCODER_GITHUB_AUTOSYNC="true"
 ```
 
-Write/patch operations stop at an approval boundary by default. After reviewing the plan, approve the run with `POST /api/agent/runs/{run_id}/approve`.
+For Windows CMD, the equivalent is:
 
-Agent tools are explicit: `read_file`, `search`, `write_file`, `apply_patch`, `run`, `test`, `git_status`, and `git_diff`. Command execution is restricted to a small development-tool allowlist and paths cannot escape the workspace.
-
-### Real model selection
-
-The IDE model selector is provider-backed rather than a list of pretend model names. On startup DreamCoder discovers:
-- **Ollama** models actually installed on the configured Ollama server
-- **Hugging Face** when `HF_TOKEN` + `HF_MODEL` are configured
-- **OpenAI-compatible** models when `OPENAI_MODEL` and `OPENAI_API_KEY` or `OPENAI_BASE_URL` are configured
-- an explicitly labeled **Mock / offline** option for development
-
-The selected provider/model is sent unchanged through the central router. Provider health is shown beside the selector. Real-provider failures are surfaced as unavailable/error; they are never disguised as mock inference.
-
-### Model-selected chat
-
-Chat is no longer handled by a hard-coded heuristic responder. Every chat request carries the UI's selected model into the central model router, and the router invokes that model adapter's native conversational interface. Project mode additionally supplies indexed project context and the saved project goal; General mode omits project context.
-
-The chat response reports both the selected model and the backend in the UI. If a model is configured as a mock/offline adapter, DreamCoder labels that explicitly rather than presenting a heuristic answer as real model inference.
-
-### Folder Analysis is project-scoped
-
-Folder Analysis is a separate hoverable/dismissible surface rather than another chat message. Opening a folder replaces the active project index; **Add Files** can still merge files intentionally. Analysis is restricted to the indexed folder and reports its exact scope.
-
-The selected model first identifies the project type and architecture from that folder. It then proposes development improvements specific to that project. A recommendation can ask the selected model to generate a complete file update; DreamCoder shows the diff before the live update is applied. Generic canned cross-project recommendations are not used as model analysis.
-
-
-### Work from the IDE
-
-The **◆ Agent** action now runs the project agent from inside DreamCoder:
-1. Select the real model/provider in the IDE.
-2. Give the agent a development goal.
-3. Review the model-generated plan.
-4. Generate and review the proposed file changes.
-5. Explicitly apply them.
-6. DreamCoder runs the project test command and reports failures.
-7. Failed validation can be sent back through the selected model for another repair approval.
-
-This keeps the development loop in the IDE instead of requiring an external AI chat window.
-
-## Live GitHub development sync
-
-DreamCoder can mirror IDE edits directly to a GitHub repository. When enabled, stopping edits for about 900ms saves the current file through the backend and commits the latest contents to the configured branch. Agent-generated file changes use the same live sync path.
-
-Configure this on the machine running the DreamCoder backend:
-
-```bash
-# GitHub fine-grained token with Contents: Read and write
-set GITHUB_TOKEN=github_pat_xxx
-
-# Repository and branch to mirror
+```bat
+set GITHUB_TOKEN=...
 set DREAMCODER_GITHUB_REPO=PcButNoBTC/DreamCoder
 set DREAMCODER_GITHUB_BRANCH=main
 set DREAMCODER_GITHUB_AUTOSYNC=true
 ```
 
-PowerShell uses `$env:GITHUB_TOKEN="github_pat_xxx"` instead.
+Optional OAuth-related settings may also be used for the GitHub auth flow:
 
-The token is **server-side only** and is never sent to the browser. The IDE shows live GitHub status in the bottom status bar:
-- **synced ✓** — the latest editor contents are committed
-- **syncing…** — a commit is in progress
-- **local only** — GitHub autosync is not configured
-- **sync error** — the local save succeeded but GitHub rejected/unavailable
-
-API endpoints:
-- `GET /api/github/status` — configuration/connection state without exposing the token
-- `POST /api/github/sync` — explicitly mirror the indexed project snapshot
-- `POST /api/files/save` — local index save plus GitHub sync by default
-
-This is intentionally a **save-based live sync**, not a commit for every keystroke. It keeps Git history usable while making the IDE's development state continuously progress on the configured GitHub branch.
-
-
-## Canonical workspace + Git runtime
-
-DreamCoder now treats a configured **workspace directory as the canonical project state**. The project index describes that workspace; it is no longer intended to be a disconnected copy.
-
-When a workspace is active:
-- filesystem edits are watched and re-indexed;
-- IDE saves write through to the workspace;
-- Git branch/HEAD/working-tree state is visible in the IDE;
-- configured project commands can be executed by the runtime;
-- Agent tests use the project's configured test command when available;
-- GitHub synchronization snapshots the canonical workspace rather than stale browser buffers;
-- GitHub CI validates pushes and pull requests.
-
-Configure a workspace directly with the backend API or start the file watcher for a local project folder. Starting the watcher automatically makes that folder the canonical workspace.
-
-Project commands are stored through **Project Context**. The first configured command is treated as the test command, followed by build/dev/lint/format slots.
-
-The intended development loop is now:
-
-```text
-Workspace ↔ Editor ↔ Agent ↔ Tests
-      ↕             ↕
-     Git ← Project Memory
-      ↕
-   GitHub ↔ CI
+```bash
+export DREAMCODER_GITHUB_CLIENT_ID="..."
+export DREAMCODER_GITHUB_CLIENT_SECRET="..."
+export DREAMCODER_OAUTH_STATE_SECRET="..."
+export DREAMCODER_GITHUB_CALLBACK="http://127.0.0.1:8000/api/github/oauth/callback"
 ```
 
-Git operations exposed by the workspace runtime include status, diff, log, branch/switch, add, commit, fetch, pull and push. Write/destructive operations remain subject to the Agent approval model.
+The backend exposes status at:
+
+- http://127.0.0.1:8000/api/github/status
+- http://127.0.0.1:8000/api/github/oauth/config
+
+### Agent workflow
+
+The project agent runs in a workspace-bound loop with explicit tool access, approval steps, and validation. It can:
+
+- read files
+- search the repo
+- patch files
+- run commands in a safe allowlist
+- review git status and diffs
+- return results for approval before applying changes
+
+---
+
+## Architecture
+
+```text
+Browser / Electron UI
+       |
+       v
+FastAPI backend (backend/main.py)
+       |
+       +--> model router / provider adapters
+       +--> SQLite project index and workspace metadata
+       +--> agent runtime and approval flow
+       +--> folder analysis / chat / AI suggestions
+       +--> GitHub sync and OAuth status
+       +--> local terminal / file operations
+```
+
+---
+
+## Repository layout
+
+```text
+DreamCoder/
+├── backend/              # FastAPI API and app logic
+├── frontend/             # static web UI shell
+├── electron/             # desktop app wrapper
+├── scripts/              # local helper scripts
+├── requirements.txt      # Python dependencies
+├── README.md             # project overview
+├── start_dreamcoder_windows.bat
+├── pytest.ini
+├── SETUP.md
+├── CHANGES.md
+└── PRODUCTION.md
+```
+
+---
+
+## Typical local workflow
+
+1. Start the backend.
+2. Open the frontend in the browser.
+3. Pick a model/provider from the selector.
+4. Open or drop a folder.
+5. Use chat, suggestions, analysis, or the agent.
+6. Optionally enable GitHub sync to push repo updates.
+
+---
+
+## Important note
+
+If the app shows Offline / Unavailable in the UI, that usually means the browser is hitting the wrong host. The full app depends on the live backend, not the GitHub Pages shell alone.
+
+Use the backend URL directly:
+
+```js
+window.DREAMCODER_API = "http://127.0.0.1:8000";
+location.reload();
+```
+
+This repo is intended to be run locally as a functional AI development environment with real backend services behind it.
