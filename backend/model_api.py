@@ -47,6 +47,7 @@ async def benchmarks():
 
 @router.post("/api/models/benchmarks/run")
 async def run_benchmarks(request: Request, body:BenchmarkRun):
+    _admin_guard(request)
     from main import router as ai_router
     try:
         model_lab.register(body.model_id, body.model_id.split(":",1)[0] if ":" in body.model_id else ("huggingface" if "/" in body.model_id else "local"))
@@ -58,6 +59,7 @@ async def run_benchmarks(request: Request, body:BenchmarkRun):
 
 @router.post("/api/models/evaluate")
 async def evaluate_model(request: Request, body:dict):
+    _admin_guard(request)
     from main import router as ai_router
     model_id=str(body.get("model_id","")).strip()
     if not model_id: raise HTTPException(400,"model_id required")
