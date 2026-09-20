@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 from typing import Any, Optional
 
+import httpx
+
 from cache import SuggestionCache
 from hf_catalog import get_catalog
 from models import (
@@ -53,12 +55,44 @@ MODEL_REGISTRY = {
 }
 
 
+def _configured_ollama_base() -> Optional[str]:
+    """Return the configured Ollama base URL only when the user explicitly set one."""
+    value = (os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL") or "").strip()
+    return value or None
+
+
+def _ollama_server_available(base_url: str | None = None) -> bool:
+    """Return True when a local Ollama endpoint is actually responding."""
+    candidates: list[str] = []
+    if base_url:
+        candidates.append(base_url.rstrip("/"))
+    explicit = _configured_ollama_base()
+    if explicit:
+        candidates.append(explicit.rstrip("/"))
+    for candidate in ("http://localhost:11434", "http://127.0.0.1:11434"):
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    for url in candidates:
+        try:
+            response = httpx.get(f"{url}/api/tags", timeout=2.0)
+            response.raise_for_status()
+            payload = response.json()
+            if isinstance(payload, dict) and isinstance(payload.get("models"), list):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _effective_local_backend() -> str:
     """Pick the default local backend without forcing a dead Ollama install."""
     backend = (os.getenv("DREAMCODER_LOCAL_BACKEND") or "").strip().lower()
     if backend:
         return backend
-    if os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL"):
+    if _configured_ollama_base():
+        return "ollama"
+    if _ollama_server_available():
         return "ollama"
     if HuggingFaceModel._discover_tokens():
         return "huggingface"
@@ -131,6 +165,21 @@ class AIRouter:
             self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
             return self._models[name]
 
+        ollama_base = _configured_ollama_base()
+        ollama_model = (
+            os.getenv("OLLAMA_MODEL")
+            or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
+            or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
+            or "tinyllama"
+        )
+        local_backend = _effective_local_backend()
+        has_hf_tokens = bool(HuggingFaceModel._discover_tokens())
+
+        # Explicit local Ollama config should win only when the user actually configured it.
+        if local_backend == "ollama" and ollama_base and not has_hf_tokens and "/" in name and not name.lower().startswith(("http://", "https://")):
+            self._models[name] = OllamaModel(ollama_model, base_url=ollama_base)
+            return self._models[name]
+
         # Full Hub IDs like "TroyDoesAI/Unrestricted-Knowledge-Will-Not-Refuse-15B"
         # are real Hugging Face models, not mock placeholders. Resolve them to HF even
         # when no explicit token is present so the app does not silently hide a real model.
@@ -138,20 +187,12 @@ class AIRouter:
             self._models[name] = HuggingFaceModel(model_id=name)
             return self._models[name]
 
-        ollama_base = os.getenv("OLLAMA_BASE_URL") or os.getenv("DREAMCODER_OLLAMA_PRIMARY_URL")
-        ollama_model = (
-            os.getenv("OLLAMA_MODEL")
-            or os.getenv("DREAMCODER_OLLAMA_PRIMARY_MODEL")
-            or os.getenv("DREAMCODER_OLLAMA_LOCAL_MODEL")
-            or "tinyllama"
-        )
-
         if ollama_base and (
             name in {"ollama", "Ollama", "Local Model"}
             or name == ollama_model
             or name.endswith(f"/{ollama_model}")
             or name.endswith(f"/{ollama_model}:latest")
-            or os.getenv("DREAMCODER_LOCAL_BACKEND", "ollama").lower() == "ollama"
+            or local_backend == "ollama"
         ):
             self._models[name] = OllamaModel(ollama_model, base_url=ollama_base)
             return self._models[name]

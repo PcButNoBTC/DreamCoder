@@ -46,17 +46,59 @@ def test_selected_model_prefers_configured_local_ollama(monkeypatch):
     assert getattr(model, "model_name", "") == "tinyllama"
 
 
+def test_local_model_prefers_live_ollama_before_hf(monkeypatch):
+    monkeypatch.delenv("DREAMCODER_LOCAL_BACKEND", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.delenv("DREAMCODER_OLLAMA_PRIMARY_URL", raising=False)
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    monkeypatch.setenv("HF_TOKEN", "hf-test-token")
+
+    import ai_router
+
+    class FakeResp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"models": [{"name": "qwen2.5-coder:7b"}]}
+
+    monkeypatch.setattr(ai_router.httpx, "get", lambda *args, **kwargs: FakeResp())
+
+    router = AIRouter()
+    model = router.get_model("Local Model")
+
+    assert isinstance(model, OllamaModel)
+    assert getattr(model, "model_name", "") == "qwen2.5-coder:7b"
+
+
 def test_local_model_falls_back_to_hf_when_ollama_is_unconfigured(monkeypatch):
     monkeypatch.delenv("DREAMCODER_LOCAL_BACKEND", raising=False)
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("DREAMCODER_OLLAMA_PRIMARY_URL", raising=False)
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
     monkeypatch.setenv("HF_TOKEN", "hf-test-token")
-    router = AIRouter()
 
+    import ai_router
+    monkeypatch.setattr(ai_router.httpx, "get", lambda *args, **kwargs: (_ for _ in ()).throw(Exception("offline")))
+
+    router = AIRouter()
     model = router.get_model("Local Model")
 
     assert isinstance(model, HuggingFaceModel)
+
+
+def test_hf_model_id_falls_back_to_local_ollama_when_no_hf_token(monkeypatch):
+    monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "ollama")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("HF_MODEL", raising=False)
+    router = AIRouter()
+
+    model = router.get_model("meta-llama/Llama-3.1-8B-Instruct")
+
+    assert isinstance(model, OllamaModel)
+    assert getattr(model, "model_name", "") == "qwen2.5-coder:7b"
 
 
 def test_hf_repo_model_id_does_not_fall_back_to_mock(monkeypatch):

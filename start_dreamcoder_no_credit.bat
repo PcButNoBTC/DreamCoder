@@ -10,9 +10,9 @@ REM ----------------------------------------------------------------------------
 REM Prefer local open-source models via Ollama instead of paid credit-based APIs.
 set "DREAMCODER_LOCAL_BACKEND=ollama"
 set "OLLAMA_BASE_URL=http://localhost:11434"
-set "OLLAMA_MODEL=qwen2.5-coder:7b"
+set "OLLAMA_MODEL=tinyllama:latest"
 set "DREAMCODER_OLLAMA_PRIMARY_URL=http://localhost:11434"
-set "DREAMCODER_OLLAMA_PRIMARY_MODEL=qwen2.5-coder:7b"
+set "DREAMCODER_OLLAMA_PRIMARY_MODEL=tinyllama:latest"
 set "HF_TOKEN=hf_your_huggingface_token_here"
 set "HF_MODEL=meta-llama/Llama-3.1-8B-Instruct"
 
@@ -41,11 +41,16 @@ if not defined OLLAMA_EXE (
     )
 )
 if defined OLLAMA_EXE (
-    echo Starting Ollama server...
-    start "Ollama Server" cmd /k ""%OLLAMA_EXE%" serve"
-    ping 127.0.0.1 -n 4 > nul
-    echo Pulling model qwen2.5-coder:7b...
-    call "%OLLAMA_EXE%" pull qwen2.5-coder:7b
+    powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest -Uri 'http://127.0.0.1:11434/api/tags' -TimeoutSec 3 | Out-Null; exit 0 } catch { exit 1 }" >nul 2>nul
+    if errorlevel 1 (
+        echo Starting Ollama server...
+        start "Ollama Server" cmd /k ""%OLLAMA_EXE%" serve"
+        ping 127.0.0.1 -n 6 > nul
+    ) else (
+        echo Ollama server is already running.
+    )
+    echo Pulling model tinyllama:latest...
+    call "%OLLAMA_EXE%" pull tinyllama:latest
     set "DREAMCODER_LOCAL_BACKEND=ollama"
 ) else (
     echo Ollama could not be installed automatically.
@@ -68,7 +73,7 @@ start "" "http://127.0.0.1:8001/index.html"
 echo DreamCoder local/no-credit launcher started.
 echo.
 echo If Ollama is not running yet, install/start it and pull a model:
-echo   ollama pull qwen2.5-coder:7b
+echo   ollama pull tinyllama:latest
 
 echo Then start the app and select the local provider in the model selector.
 echo.
