@@ -18,6 +18,8 @@ async def tasks(project_id: str):
 
 @router.post("/api/projects/{project_id}/tasks/plan")
 async def plan(project_id: str, body: TaskPlanRequest):
+    if body.include:
+        return {"project_id":project_id,"tasks":task_graph.create(project_id,body.include),"ready":task_graph.next_ready(project_id)}
     return task_graph.plan(project_id)
 
 @router.post("/api/projects/{project_id}/tasks/{task_id}/assign")
