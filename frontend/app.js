@@ -1803,25 +1803,26 @@ function formatNum(n) {
 }
 
 async function selectHfModel(m) {
-  const id = m.id || m.name;
-  modelCurrent.textContent = id.split("/").pop();
-  // Add to select if missing
+  const rawId = m.id || m.name;
+  const normalized = rawId.startsWith("hf:") ? rawId : `hf:${rawId.replace(/^HuggingFace\//i, "")}`;
+  const id = normalized;
+  modelCurrent.textContent = rawId.split("/").pop();
   let opt = [...modelSelect.options].find((o) => o.value === id);
   if (!opt) {
     opt = document.createElement("option");
     opt.value = id;
-    opt.textContent = id;
+    opt.textContent = id.replace(/^hf:/, "");
     modelSelect.appendChild(opt);
   }
   modelSelect.value = id;
+  localStorage.setItem("dc_model", id);
   document.querySelectorAll(".hf-item").forEach((el) => el.classList.remove("active-hf"));
-  // mark clicked roughly
-  toast(`HF model → ${id}`, "success");
+  toast(`HF model → ${id.replace(/^hf:/, "")}`, "success");
   setStatus(`Model: ${id}`);
   try {
     await api("/api/models/huggingface/select", {
       method: "POST",
-      body: JSON.stringify({ model_id: id }),
+      body: JSON.stringify({ model_id: rawId }),
     });
   } catch (_) {}
 }

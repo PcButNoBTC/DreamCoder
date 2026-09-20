@@ -191,6 +191,11 @@ class AIRouter:
             use_api = not _looks_like_local_format_model(model_id)
             self._models[name] = HuggingFaceModel(model_id=model_id, use_api=use_api)
             return self._models[name]
+        if name.lower().startswith("huggingface/"):
+            model_id = name.split("/", 1)[1]
+            use_api = not _looks_like_local_format_model(model_id)
+            self._models[name] = HuggingFaceModel(model_id=model_id, use_api=use_api)
+            return self._models[name]
         if name.startswith("openai:"):
             self._models[name] = OpenAICompatibleModel(name.split(":", 1)[1])
             return self._models[name]

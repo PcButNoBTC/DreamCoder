@@ -138,6 +138,17 @@ def test_local_format_model_ids_prefer_ollama_when_configured(monkeypatch):
     assert getattr(model, "model_name", "") == "qwen2.5-coder:7b"
 
 
+def test_huggingface_prefixed_model_name_routes_to_hf_adapter(monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "mock")
+
+    router = AIRouter()
+    model = router.get_model("HuggingFace/deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct")
+
+    assert isinstance(model, HuggingFaceModel)
+    assert getattr(model, "model_id", "") == "deepseek-ai/DeepSeek-Coder-V2-Lite-Instruct"
+
+
 def test_list_models_prefers_ollama_when_configured(monkeypatch):
     monkeypatch.setenv("DREAMCODER_LOCAL_BACKEND", "ollama")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
