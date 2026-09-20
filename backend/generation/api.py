@@ -40,7 +40,7 @@ async def start_generation_job(body: JobRequest):
         return {"ok":False,"job_id":None,"project_id":project["id"],"status":"blocked","assessment":assessment.as_dict(),"independent_review":review}
     async def runner(request, emit):
         emit("generation.plan.started", project_id=project["id"], safeguard_model=body.safeguard_model, selected_model=selected_model, routing=routing)
-        project_event(project["id"],"generation.started","orchestrator",request.get("model",""),{"safeguard_model":body.safeguard_model,"independent_review":review})
+        project_event(project["id"],"generation.started","orchestrator",request.get("model",""),{"safeguard_model":body.safeguard_model,"independent_review":review,"routing":routing,"selected_model":selected_model})
         from generator import generate_project_with_model
         request["model"]=selected_model
         result=await generate_project_with_model(request["prompt"],request.get("goal",""),router=ai_router)
