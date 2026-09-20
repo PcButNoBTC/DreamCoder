@@ -68,8 +68,8 @@ def _run(args: list[str], timeout: int = 30) -> dict[str, Any]:
 
 
 def status() -> dict[str, Any]:
-    p = root()
     explicit = bool(db.get_setting("workspace_root", ""))
+    p = root()
     if p is None:
         return {"configured": False, "root": None, "git": False}
     git = _run(["git", "status", "--short", "--branch"])
