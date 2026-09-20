@@ -16,6 +16,16 @@ class GitHubSync:
     def from_env(cls):
         token=os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or os.getenv("GITHUB_APP_TOKEN") or ""
         return cls(os.getenv("DREAMCODER_GITHUB_REPO","").strip(),os.getenv("DREAMCODER_GITHUB_BRANCH","main").strip() or "main",token,os.getenv("DREAMCODER_GITHUB_AUTOSYNC","true").lower() not in {"0","false","no","off"})
+    def apply_runtime_state(self, *, repo:str|None=None, branch:str|None=None, token:str|None=None, enabled:bool|None=None):
+        if repo is not None:
+            self.repo = repo.strip()
+        if branch is not None:
+            self.branch = branch.strip() or "main"
+        if token is not None:
+            self.token = token
+        if enabled is not None:
+            self.enabled = enabled
+        return self.status()
     @property
     def configured(self): return bool(self.enabled and self.repo and self.token and "/" in self.repo)
     def status(self):

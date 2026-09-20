@@ -4,7 +4,23 @@ window.addEventListener("error", (e) => {
 });
 /* DreamCoder – interactive frontend with live AI self-update (Evolve) */
 
-const API_BASE = window.DREAMCODER_API || "http://localhost:8000";
+function resolveApiBase() {
+  const explicit = window.DREAMCODER_API && String(window.DREAMCODER_API).trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  const candidates = [
+    window.location.origin,
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://0.0.0.0:8000",
+  ];
+  const filtered = [...new Set(candidates.filter(Boolean))];
+  for (const candidate of filtered) {
+    if (candidate && candidate !== "null" && candidate !== "undefined") return candidate.replace(/\/$/, "");
+  }
+  return "http://localhost:8000";
+}
+
+const API_BASE = resolveApiBase();
 
 function showSyncBanner(message, kind="error", backupPath="") {
   let banner=document.getElementById("syncBanner");

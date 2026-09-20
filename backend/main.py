@@ -64,6 +64,21 @@ app.add_middleware(
 router = AIRouter()
 db.init_db()
 production_init()
+def refresh_github_runtime_state() -> dict[str, Any]:
+    token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','') or os.getenv('GITHUB_TOKEN','') or os.getenv('GH_TOKEN','') or os.getenv('GITHUB_APP_TOKEN','')
+    repo=db.get_setting('github_repo', os.getenv('DREAMCODER_GITHUB_REPO','')).strip()
+    branch=db.get_setting('github_branch', os.getenv('DREAMCODER_GITHUB_BRANCH','main')).strip() or 'main'
+    enabled=str(os.getenv('DREAMCODER_GITHUB_AUTOSYNC','true')).lower() not in {'0','false','no','off'}
+    if token:
+        os.environ['GITHUB_TOKEN']=token
+    else:
+        os.environ.pop('GITHUB_TOKEN', None)
+    if repo:
+        os.environ['DREAMCODER_GITHUB_REPO']=repo
+    if branch:
+        os.environ['DREAMCODER_GITHUB_BRANCH']=branch
+    return github_sync.apply_runtime_state(repo=repo or github_sync.repo, branch=branch, token=token, enabled=enabled)
+
 _stored_github_token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','')
 if _stored_github_token:
     os.environ['GITHUB_TOKEN']=_stored_github_token
@@ -72,6 +87,7 @@ if db.get_setting('github_repo',''):
     github_sync.repo=db.get_setting('github_repo','')
 if db.get_setting('github_branch',''):
     github_sync.branch=db.get_setting('github_branch','')
+refresh_github_runtime_state()
 
 # Seed demo files if empty
 if not router.index.list_files():
@@ -286,7 +302,9 @@ async def github_disconnect(): return github_auth.disconnect()
 async def github_select_repository(body:dict):
     repo=str(body.get("repo","")).strip(); branch=str(body.get("branch","main")).strip()
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repo): raise HTTPException(400,"Invalid repository")
-    db.set_setting("github_repo",repo); db.set_setting("github_branch",branch); github_sync.repo=repo; github_sync.branch=branch; return {"ok":True,"repo":repo,"branch":branch}
+    db.set_setting("github_repo",repo); db.set_setting("github_branch",branch); os.environ["DREAMCODER_GITHUB_REPO"]=repo; os.environ["DREAMCODER_GITHUB_BRANCH"]=branch
+    github_sync.apply_runtime_state(repo=repo, branch=branch, token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','') or os.getenv('GITHUB_TOKEN','') or os.getenv('GH_TOKEN','') or os.getenv('GITHUB_APP_TOKEN',''))
+    return {"ok":True,"repo":repo,"branch":branch}
 @app.get("/api/git/workflow/status")
 async def git_workflow_status(): return git_workflow.status()
 @app.get("/api/git/workflow/branches")
@@ -314,7 +332,11 @@ async def github_oauth_callback(code:str="",state:str=""):
     if not github_auth.verify_state(state): return HTMLResponse("<h3>DreamCoder GitHub sign-in failed: invalid state.</h3>",status_code=400)
     try:
         u=await github_auth.exchange(code)
-        github_sync.token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","")
+        github_sync.apply_runtime_state(
+            repo=db.get_setting("github_repo", os.getenv("DREAMCODER_GITHUB_REPO","")),
+            branch=db.get_setting("github_branch", os.getenv("DREAMCODER_GITHUB_BRANCH","main")),
+            token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
+        )
         return HTMLResponse("<script>window.close()</script><h3>DreamCoder connected to GitHub. You can close this window.</h3>")
     except Exception as exc:
         return HTMLResponse("<h3>GitHub sign-in failed.</h3><pre>"+escape_html(str(exc))+"</pre>",status_code=502)
@@ -322,7 +344,12 @@ async def github_oauth_callback(code:str="",state:str=""):
 @app.post("/api/github/oauth/refresh")
 async def github_oauth_refresh():
     d=await github_auth.refresh()
-    if d.get("ok"): github_sync.token=db.get_setting("github_oauth_token","")
+    if d.get("ok"):
+        github_sync.apply_runtime_state(
+            repo=db.get_setting("github_repo", os.getenv("DREAMCODER_GITHUB_REPO","")),
+            branch=db.get_setting("github_branch", os.getenv("DREAMCODER_GITHUB_BRANCH","main")),
+            token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
+        )
     return d
 
 @app.get("/api/github/me")
@@ -342,8 +369,13 @@ async def github_select_repository(body:dict):
     repo=body.get("repo","")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repo): raise HTTPException(400,"invalid repository")
     db.set_setting("github_repo",repo); os.environ["DREAMCODER_GITHUB_REPO"]=repo
-    github_sync.repo=repo
-    if body.get("branch"): db.set_setting("github_branch",body["branch"]); os.environ["DREAMCODER_GITHUB_BRANCH"]=body["branch"]; github_sync.branch=body["branch"]
+    repo_branch = body.get("branch") or "main"
+    db.set_setting("github_branch",repo_branch); os.environ["DREAMCODER_GITHUB_BRANCH"]=repo_branch
+    github_sync.apply_runtime_state(
+        repo=repo,
+        branch=repo_branch,
+        token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
+    )
     return github_sync.status()
 
 @app.get("/api/git/workflow/files")
@@ -993,7 +1025,7 @@ async def ai_provider_status():
 
 @app.get("/api/github/status")
 async def github_status():
-    return github_sync.status()
+    return refresh_github_runtime_state()
 
 @app.post("/api/github/sync")
 async def github_sync_current():
