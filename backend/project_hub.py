@@ -10,40 +10,7 @@ import sqlite3
 import db
 
 def _conn():
-    conn = db.get_conn()
-    conn.executescript("""
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, goal TEXT NOT NULL DEFAULT '',
-      prompt TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'created',
-      risk_level TEXT NOT NULL DEFAULT 'normal', stack_json TEXT NOT NULL DEFAULT '{}',
-      created_at REAL NOT NULL, updated_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS project_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL,
-      event_type TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'system',
-      model TEXT NOT NULL DEFAULT '', payload_json TEXT NOT NULL DEFAULT '{}',
-      created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS project_documents (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL,
-      kind TEXT NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL,
-      updated_at REAL NOT NULL, UNIQUE(project_id, kind, title)
-    );
-    CREATE TABLE IF NOT EXISTS project_artifacts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL,
-      kind TEXT NOT NULL, path TEXT NOT NULL DEFAULT '', metadata_json TEXT NOT NULL DEFAULT '{}',
-      created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS project_decisions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL,
-      decision TEXT NOT NULL, rationale TEXT NOT NULL DEFAULT '',
-      model TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_project_events_project ON project_events(project_id, created_at);
-    CREATE INDEX IF NOT EXISTS idx_project_docs_project ON project_documents(project_id);
-    """)
-    conn.commit()
-    return conn
+    return db.get_conn()
 
 def create(name: str, goal: str, prompt: str, stack: dict[str, Any] | None = None, risk_level: str = "normal") -> dict[str, Any]:
     pid = uuid.uuid4().hex
