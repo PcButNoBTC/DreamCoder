@@ -978,18 +978,6 @@ Rules:
 """
 
 async def generate_project_with_model(prompt: str, project_goal: str, router) -> dict[str, Any]:
-    full_prompt=(f"{GENERATOR_SYSTEM_PROMPT}\n\nProject goal: {project_goal or '(none)'}\nUser request:\n{prompt}\n\nOutput all files now.")
-    result=await router.recommend(model_name="",prompt=full_prompt,expected_format="file_blocks")
-    if not result.get("ok"):
-        return {"ok":False,"source":"model","error":result.get("error"),"losers":result.get("losers",[])}
-    files=[]
-    for match in FILE_BLOCK_RE.finditer(result.get("content","")):
-        rel=match.group(1).strip(); body=match.group(2)
-        if rel.startswith("..") or Path(rel).is_absolute(): continue
-        files.append({"path":rel,"content":body})
-    if not files: return {"ok":False,"source":"model","error":"Model produced no valid file blocks"}
-    stack=_detect_stack(prompt); name=_slug(prompt)
-    return {"ok":True,"source":"model","files":files,"name":name,"stack":stack,"file_count":len(files),
-            "summary":f"Model generated {len(files)}-file {stack['language']} project '{name}' via {result.get('winning_lane')}",
-            "run_hint":_run_hint(stack,name),"model":result.get("model"),"winning_lane":result.get("winning_lane"),
-            "latency_ms":result.get("duration_ms",0),"losers":result.get("losers",[])}
+    """Run DreamCoder's multi-model planner -> implementer -> reviewer pipeline."""
+    from generation.orchestrator import orchestrate_generation
+    return await orchestrate_generation(prompt, project_goal, router)
