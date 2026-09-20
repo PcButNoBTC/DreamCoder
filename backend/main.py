@@ -319,7 +319,7 @@ async def workflow_state():
             "plan": True,
             "generate": bool(root),
             "validate": bool(health.get("test_discovery") or health.get("signals")),
-            "review": bool(git.get("dirty") or git.get("status")),
+            "review": bool(git.get("stdout", "").strip()),
             "apply": bool(root),
             "checkpoint": bool(checkpoints),
             "git": bool(git.get("branch")),
