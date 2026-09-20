@@ -1,8 +1,9 @@
-import project_hub
+import db, project_hub
 
 def test_project_hub_round_trip(tmp_path, monkeypatch):
     monkeypatch.setattr(project_hub.db, "DB_PATH", tmp_path / "hub.db")
     monkeypatch.setattr(project_hub.db, "_CANDIDATES", [tmp_path / "hub.db"])
+    db.init_db()
     p=project_hub.create("Calculator","Build a calculator","calculator prompt",{"language":"python"},"normal")
     project_hub.document(p["id"],"overview","Overview","A calculator")
     project_hub.event(p["id"],"generation.completed","agent","test-model",{"files":4})

@@ -39,3 +39,11 @@
 - Added advisory local-model evaluator summaries that cannot override measured eligibility.
 - Added Model Lab APIs and frontend panel for registry inspection and benchmark runs.
 - Generation can automatically use an evidence-backed generation model when one is eligible; otherwise it preserves the requested model.
+
+
+## Multi-model orchestration foundation
+- Moved Model Lab and Project Hub schemas behind formal versioned migrations.
+- Added a persistent project task graph with role-specific model assignments and API endpoints.
+- Added fresh-evidence eligibility and executable Python benchmark evidence through the hardened sandbox.
+- Wired generation tasks to measured role evidence first, with the existing capability selector as a fallback.
+- Added migration CLI and a Task Graph frontend panel.
