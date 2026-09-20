@@ -55,3 +55,9 @@
 - Added optional admin-token protection for registry/benchmark/evaluation mutations.
 - Added Project Hub provenance events for task graph creation, assignment, and status changes.
 - Added model lifecycle/security tests and observability APIs.
+
+
+## Benchmark coverage + project controls
+- Expanded the safe Model Lab suite across implementation, frontend, API, SQL, container, and Git tasks.
+- Added per-project role-specific model preferences with auto-routing or explicit pinned configuration.
+- Added project model preference APIs and tests.
