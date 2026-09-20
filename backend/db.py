@@ -43,47 +43,13 @@ def get_conn() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    """Open the database and apply all registered migrations."""
     conn = get_conn()
-    cur = conn.cursor()
-    cur.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS files (
-            path TEXT PRIMARY KEY,
-            content TEXT NOT NULL,
-            language TEXT DEFAULT 'python',
-            updated_at REAL NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS symbols (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            file TEXT NOT NULL,
-            line INTEGER NOT NULL,
-            signature TEXT DEFAULT '',
-            FOREIGN KEY(file) REFERENCES files(path) ON DELETE CASCADE
-        );
-        CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
-        CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file);
-
-        CREATE TABLE IF NOT EXISTS history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            kind TEXT NOT NULL,
-            model TEXT,
-            prompt TEXT,
-            response TEXT,
-            latency_ms INTEGER,
-            created_at REAL NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL);\n\n        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-        """
-    )
-    conn.commit()
-    conn.close()
+    try:
+        from migrations import apply
+        apply(conn)
+    finally:
+        conn.close()
 
 
 # ---------- files / symbols ----------
