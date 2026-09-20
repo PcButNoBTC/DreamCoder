@@ -65,3 +65,11 @@ The observability endpoint exposes registry state, recent benchmark evidence, an
 ## Regression and repeatability
 
 Benchmark runs can be repeated (bounded to five repeats per request). DreamCoder exposes repeatability summaries with mean, min/max, and standard deviation, plus revision-grouped regression summaries. Benchmark records retain the registered model revision so behavior changes can be compared without treating a newer revision as automatically better or worse.
+
+## Benchmark coverage
+
+The safe suite now covers structured planning, Python and TypeScript implementation, React/frontend design, API contracts, SQL design, Docker/runtime design, Git workflows, debugging, testing, documentation, repository reasoning, tool-use planning, and boundary consistency.
+
+## Project-level routing controls
+
+Each Project Hub project can keep role-specific routing preferences. `auto` uses measured evidence and the router; `pinned` records an explicit model choice for that project role. Pinned choices are project configuration, not a replacement for benchmark evidence elsewhere.
