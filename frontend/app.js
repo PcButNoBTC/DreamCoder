@@ -3056,3 +3056,54 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
 if(window.dreamcoderDesktop?.onUpdateReady){
  window.dreamcoderDesktop.onUpdateReady(info=>{if(confirm("DreamCoder "+(info?.version||"")+" is ready. Restart to install?"))window.dreamcoderDesktop.installUpdate();});
 }
+
+
+/* Project Hub — persistent living registry, timeline, documentation and provenance. */
+(function projectHubUI(){
+  const style=document.createElement("style");
+  style.textContent=".dc-hub{position:fixed;inset:6vh 5vw;z-index:11000;background:#0d121a;border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 100px #000b;display:flex;flex-direction:column;overflow:hidden}.dc-hub[hidden]{display:none}.dc-hub-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}.dc-hub-body{display:grid;grid-template-columns:280px 1fr;min-height:0;flex:1}.dc-hub-list{overflow:auto;border-right:1px solid var(--border);padding:10px}.dc-hub-card{padding:10px;margin-bottom:7px;border:1px solid var(--border);border-radius:9px;cursor:pointer}.dc-hub-card.active{border-color:var(--accent)}.dc-hub-main{overflow:auto;padding:18px}.dc-hub-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.dc-hub-tabs button,.dc-hub-head button{border:1px solid var(--border);background:#111823;color:var(--text);border-radius:7px;padding:7px 10px;cursor:pointer}.dc-hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dc-hub-pre{white-space:pre-wrap;background:#080b10;padding:10px;border-radius:8px;overflow:auto}.dc-risk{font-size:11px;text-transform:uppercase;letter-spacing:.08em}.dc-hub-muted{opacity:.7;font-size:12px}@media(max-width:800px){.dc-hub{inset:2vh 2vw}.dc-hub-body{grid-template-columns:1fr}.dc-hub-list{max-height:220px;border-right:0;border-bottom:1px solid var(--border)}}";
+  document.head.appendChild(style);
+  const open=document.createElement("button"); open.className="chip"; open.textContent="◈ Project Hub"; open.style.position="fixed"; open.style.right="130px"; open.style.bottom="12px"; open.style.zIndex="9999"; document.body.appendChild(open);
+  const box=document.createElement("section"); box.className="dc-hub"; box.hidden=true;
+  box.innerHTML='<div class="dc-hub-head"><strong>DreamCoder Project Hub</strong><span class="dc-hub-muted" id="dcHubCount"></span><span style="flex:1"></span><button id="dcHubNew">+ New project</button><button id="dcHubClose">×</button></div><div class="dc-hub-body"><aside class="dc-hub-list" id="dcHubList"></aside><main class="dc-hub-main" id="dcHubMain"><div class="dc-hub-muted">Select a project.</div></main></div>';
+  document.body.appendChild(box);
+  let projects=[], selected=null, activeTab="overview";
+  async function get(path){return api(path)}
+  function esc(v){return escapeHtml(String(v??""))}
+  async function load(){
+    projects=await get("/api/projects").catch(()=>[]);
+    document.getElementById("dcHubCount").textContent=projects.length+" projects";
+    const list=document.getElementById("dcHubList");
+    list.innerHTML=projects.map(p=>'<div class="dc-hub-card '+(selected===p.id?"active":"")+'" data-p="'+esc(p.id)+'"><strong>'+esc(p.name)+'</strong><div class="dc-hub-muted">'+esc(p.status)+' · '+esc(p.risk_level)+'</div><div class="dc-hub-muted">'+esc(p.goal).slice(0,90)+'</div></div>').join("") || '<div class="dc-hub-muted">No projects yet.</div>';
+    list.querySelectorAll("[data-p]").forEach(x=>x.onclick=()=>{selected=x.dataset.p;activeTab="overview";render();});
+    if(selected && !projects.some(p=>p.id===selected)) selected=projects[0]?.id||null;
+    if(!selected && projects[0]) selected=projects[0].id;
+    render();
+  }
+  async function render(){
+    const main=document.getElementById("dcHubMain");
+    if(!selected){main.innerHTML='<div class="dc-hub-muted">Create a project from the generation workflow and it will appear here.</div>';return;}
+    const p=await get("/api/projects/"+encodeURIComponent(selected)).catch(()=>null);
+    if(!p){main.innerHTML="<div>Project unavailable.</div>";return;}
+    main.innerHTML='<div class="dc-hub-tabs">'+["overview","timeline","documents","artifacts","decisions"].map(t=>'<button data-tab="'+t+'">'+t[0].toUpperCase()+t.slice(1)+'</button>').join("")+'</div><div id="dcHubPanel"></div>';
+    main.querySelectorAll("[data-tab]").forEach(b=>{b.onclick=()=>{activeTab=b.dataset.tab;renderPanel(p)}});
+    renderPanel(p);
+  }
+  function renderPanel(p){
+    const el=document.getElementById("dcHubPanel");
+    if(activeTab==="overview"){
+      el.innerHTML='<h2>'+esc(p.name)+'</h2><p>'+esc(p.goal)+'</p><div class="dc-hub-grid"><div><b>Status</b><div>'+esc(p.status)+'</div></div><div><b>Risk</b><div class="dc-risk">'+esc(p.risk_level)+'</div></div><div><b>Stack</b><div>'+esc(JSON.stringify(p.stack))+'</div></div><div><b>Created</b><div>'+new Date(p.created_at*1000).toLocaleString()+'</div></div></div><h3>Prompt</h3><div class="dc-hub-pre">'+esc(p.prompt)+'</div>';
+    } else if(activeTab==="timeline"){
+      el.innerHTML='<h3>Activity</h3>'+((p.events||[]).map(e=>'<div class="dc-hub-card"><b>'+esc(e.event_type)+'</b> · '+esc(e.actor)+' · '+esc(e.model||"system")+'<div class="dc-hub-muted">'+new Date(e.created_at*1000).toLocaleString()+'</div><div class="dc-hub-pre">'+esc(JSON.stringify(e.payload||{},null,2))+'</div></div>').join("")||"<div>No events.</div>");
+    } else if(activeTab==="documents"){
+      el.innerHTML=(p.documents||[]).map(d=>'<article class="dc-hub-card"><h3>'+esc(d.title)+'</h3><div class="dc-hub-muted">'+esc(d.kind)+'</div><div class="dc-hub-pre">'+esc(d.content)+'</div></article>').join("")||"<div>No generated documentation yet.</div>";
+    } else if(activeTab==="artifacts"){
+      el.innerHTML=(p.artifacts||[]).map(a=>'<div class="dc-hub-card"><b>'+esc(a.kind)+'</b><div>'+esc(a.path)+'</div><div class="dc-hub-pre">'+esc(JSON.stringify(a.metadata||{},null,2))+'</div></div>').join("")||"<div>No artifacts recorded.</div>";
+    } else {
+      el.innerHTML=(p.decisions||[]).map(d=>'<div class="dc-hub-card"><b>'+esc(d.decision)+'</b><p>'+esc(d.rationale)+'</p><div class="dc-hub-muted">Model: '+esc(d.model)+'</div></div>').join("")||"<div>No decisions recorded.</div>";
+    }
+  }
+  open.onclick=()=>{box.hidden=false;load()};
+  box.querySelector("#dcHubClose").onclick=()=>box.hidden=true;
+  box.querySelector("#dcHubNew").onclick=()=>{box.hidden=true;document.getElementById("evolveInput")?.focus();toast("Create the project through Generate; it will automatically appear in Project Hub.","info")};
+})();
