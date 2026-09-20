@@ -78,6 +78,7 @@ app.add_middleware(
 
 router = AIRouter()
 db.init_db()
+github_auth.migrate_legacy_credentials()
 production_init()
 def refresh_github_runtime_state() -> dict[str, Any]:
     token=(get_credential('github_oauth_token') if credentials_available() else '') or os.getenv('GITHUB_TOKEN','') or os.getenv('GH_TOKEN','') or os.getenv('GITHUB_APP_TOKEN','')
