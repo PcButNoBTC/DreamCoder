@@ -26,6 +26,12 @@ BENCHMARKS = (
     Benchmark("documentation","documentation","documentation","Write concise API documentation for GET /api/projects/{project_id}, including purpose, path parameter, and a 404 response.",("GET","404","project")),
     Benchmark("repository-reasoning","repository_reasoning","repository_reasoning","Given an API layer, database layer, model adapter layer, and frontend, describe a safe change plan for adding a model registry. Identify dependencies and validation steps.",("database","frontend","validation")),
     Benchmark("tool-use-plan","tool_use","tool_use","Describe the sequence of tool actions an IDE agent should use to add a small feature, run tests, inspect failures, and produce a reviewable change. Do not execute anything.",("tests","failure","review")),
+    Benchmark("typescript-implementation","coding","generation","Write a TypeScript function named clamp(value,min,max) that returns the value limited to the inclusive range. Return only a TypeScript code block.",("clamp",),"typescript"),
+    Benchmark("react-component-design","frontend","generation","Describe a small React component that renders a list of projects with an empty state and a loading state. Include props and accessibility considerations.",("projects","loading","accessibility")),
+    Benchmark("api-contract","api","planning","Design a REST endpoint contract for creating a project. Include method, path, request fields, success response, and validation errors.",("POST","request","validation")),
+    Benchmark("sql-design","database","planning","Design a normalized SQL schema for projects and project events. Identify primary keys and the project-to-events relationship.",("PRIMARY KEY","project","events")),
+    Benchmark("docker-build-design","container","testing","Describe a minimal Docker build strategy for a Python web service that keeps runtime privileges low and does not require network access at runtime.",("read-only","non-root","network")),
+    Benchmark("git-workflow","git","tool_use","Describe a safe Git workflow for a feature branch: inspect status, make a change, run tests, review the diff, commit, and open a pull request.",("status","tests","diff")),
     Benchmark("boundary-consistency","boundary","review","Explain how an AI development platform should evaluate ambiguous dual-use software requests while preserving legitimate benign development. Focus on consistent classification, evidence, and transparent routing.",("classification","evidence","routing")),
 )
 
