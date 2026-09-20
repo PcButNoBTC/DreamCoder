@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">DreamCoder logo</title>
+  <desc id="desc">A futuristic D monogram with an orbital ring and star, in cyan, blue and violet.</desc>
+  <defs>
+    <linearGradient id="g" x1="70" y1="60" x2="430" y2="450" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16E0FF"/>
+      <stop offset=".48" stop-color="#1687FF"/>
+      <stop offset="1" stop-color="#8B3DFF"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="80" y1="380" x2="440" y2="130" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7D3CFF"/>
+      <stop offset=".52" stop-color="#18CFFF"/>
+      <stop offset="1" stop-color="#8A6BFF"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#030A1B"/>
+  <circle cx="256" cy="256" r="176" fill="#07132C"/>
+  <g filter="url(#glow)">
+    <path d="M156 96h112c96 0 154 61 154 160s-58 160-154 160H156V96Zm76 70v180h36c52 0 78-31 78-90s-26-90-78-90h-36Z" fill="url(#g)"/>
+    <path d="M70 302c44 57 116 89 194 89 82 0 155-35 198-95" fill="none" stroke="url(#ring)" stroke-width="24" stroke-linecap="round"/>
+    <path d="M54 214c43-56 116-91 197-91 79 0 151 32 196 87" fill="none" stroke="url(#ring)" stroke-width="14" stroke-linecap="round" opacity=".9"/>
+  </g>
+  <path d="M256 174l12 31 31 12-31 12-12 31-12-31-31-12 31-12 12-31Z" fill="#EAF8FF"/>
+</svg>
