@@ -101,3 +101,28 @@ async def model_repeatability(model_id: str, benchmark_id: str | None = None):
 @router.get("/api/models/regression")
 async def model_regression(model_id: str):
     return {"model_id":model_id,"revisions":model_lab.revision_regression(model_id)}
+
+@router.post("/api/models/discover")
+async def discover_models(request: Request):
+    _admin_guard(request)
+    from main import router as ai_router
+    discovered=await ai_router.list_models()
+    registered=[]
+    for item in discovered:
+        model_id=str(item.get("id","")).strip()
+        if not model_id:
+            continue
+        registered.append(model_lab.register(
+            model_id,
+            str(item.get("provider","mock")),
+            str(item.get("name","")),
+            "",
+            {"status":item.get("status"),"real":bool(item.get("real"))}
+        ))
+    return {"models":registered,"discovered":discovered}
+
+@router.get("/api/models/{model_id:path}/health")
+async def model_health(model_id:str):
+    from main import router as ai_router
+    model=ai_router.get_model(model_id)
+    return {"model_id":model_id,"health":await model.health_check()}
