@@ -532,6 +532,7 @@ async def health(model: Optional[str] = None):
     info = await router.health(model)
     info["db"] = {"path": str(db.DB_PATH), "stats": db.symbol_stats()}
     info["watcher"] = {"active": _watcher is not None}
+    info["model_telemetry"] = router.model_telemetry(model)
     return info
 
 
@@ -1038,6 +1039,10 @@ async def ai_provider_runtime(): return {"stats":provider_runtime.snapshot(),"ra
 @app.get("/api/ai/providers/status")
 async def ai_provider_status():
     return router.provider_status()
+
+@app.get("/api/ai/models/telemetry")
+async def ai_model_telemetry(model: Optional[str] = None):
+    return router.model_telemetry(model)
 
 @app.get("/api/github/status")
 async def github_status():
