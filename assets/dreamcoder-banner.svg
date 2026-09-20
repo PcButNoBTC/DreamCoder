@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1280" height="420" viewBox="0 0 1280 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">DreamCoder — AI-native development studio</title>
+  <desc id="desc">DreamCoder branding banner showing the D orbital logo, product name, and generate build test repair ship workflow.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020817"/><stop offset=".55" stop-color="#07152D"/><stop offset="1" stop-color="#100826"/>
+    </linearGradient>
+    <linearGradient id="word" x1="430" y1="190" x2="870" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17DFFF"/><stop offset=".5" stop-color="#348CFF"/><stop offset="1" stop-color="#A13DFF"/>
+    </linearGradient>
+    <linearGradient id="logo" x1="60" y1="70" x2="250" y2="270" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16E0FF"/><stop offset=".5" stop-color="#1687FF"/><stop offset="1" stop-color="#8B3DFF"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-50%" width="160%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect width="1280" height="420" rx="28" fill="url(#bg)"/>
+  <ellipse cx="640" cy="395" rx="500" ry="90" fill="#5637FF" opacity=".16" filter="url(#soft)"/>
+  <g transform="translate(110 58)" filter="url(#glow)">
+    <path d="M45 0h72c61 0 99 39 99 102s-38 102-99 102H45V0Zm49 45v114h23c32 0 49-20 49-57s-17-57-49-57H94Z" fill="url(#logo)"/>
+    <path d="M-5 129c30 38 77 60 130 60 55 0 104-23 133-64" fill="none" stroke="#16DFFF" stroke-width="13" stroke-linecap="round"/>
+    <path d="M-14 72c29-38 78-61 132-61 53 0 102 22 132 59" fill="none" stroke="#7B4CFF" stroke-width="8" stroke-linecap="round"/>
+    <path d="M95 50l7 18 18 7-18 7-7 18-7-18-18-7 18-7 7-18Z" fill="#ECFBFF"/>
+  </g>
+  <text x="390" y="154" fill="#F8FBFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="78" font-weight="800">Dream</text>
+  <text x="650" y="154" fill="url(#word)" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="78" font-weight="800">Coder</text>
+  <text x="395" y="198" fill="#9DB3D8" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="21" letter-spacing="5" font-weight="600">AI-NATIVE DEVELOPMENT STUDIO</text>
+  <line x1="395" y1="225" x2="1170" y2="225" stroke="#1C355C"/>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif" text-anchor="middle">
+    <g transform="translate(445 274)"><circle r="25" fill="#0B2140" stroke="#16DFFF"/><text y="8" fill="#16DFFF" font-size="25">✦</text><text y="58" fill="#E5F0FF" font-size="16" font-weight="700">GENERATE</text></g>
+    <g transform="translate(620 274)"><circle r="25" fill="#0B2140" stroke="#4B8DFF"/><text y="8" fill="#4B8DFF" font-size="23">&lt;/&gt;</text><text y="58" fill="#E5F0FF" font-size="16" font-weight="700">BUILD</text></g>
+    <g transform="translate(795 274)"><circle r="25" fill="#0B2140" stroke="#16DFFF"/><text y="8" fill="#16DFFF" font-size="22">✓</text><text y="58" fill="#E5F0FF" font-size="16" font-weight="700">TEST</text></g>
+    <g transform="translate(970 274)"><circle r="25" fill="#0B2140" stroke="#A13DFF"/><text y="8" fill="#A13DFF" font-size="22">↻</text><text y="58" fill="#E5F0FF" font-size="16" font-weight="700">REPAIR</text></g>
+    <g transform="translate(1145 274)"><circle r="25" fill="#0B2140" stroke="#16DFFF"/><text y="8" fill="#16DFFF" font-size="22">➜</text><text y="58" fill="#E5F0FF" font-size="16" font-weight="700">SHIP</text></g>
+  </g>
+  <text x="640" y="374" fill="#AFC3E6" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="22" text-anchor="middle">Multiple models. One development loop. From idea to working software.</text>
+</svg>
