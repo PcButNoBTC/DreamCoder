@@ -26,6 +26,7 @@ from models import (
 )
 from project_index import ProjectIndex
 from provider_runtime import runtime as provider_runtime
+from model_telemetry import record as record_model_telemetry
 
 
 # Display name → adapter factory
@@ -278,11 +279,15 @@ class AIRouter:
 
         model = self.get_model(model_name)
         provider = getattr(model, 'backend', None) or model.__class__.__name__
-        result = await provider_runtime.call(provider, lambda: model.complete(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
-
+        started = __import__("time").perf_counter()
+        try:
+            result = await provider_runtime.call(provider, lambda: model.complete(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
+            record_model_telemetry(model_name, provider, "suggest", True, (__import__("time").perf_counter()-started)*1000)
+        except Exception as exc:
+            record_model_telemetry(model_name, provider, "suggest", False, (__import__("time").perf_counter()-started)*1000, error=str(exc))
+            raise
         if use_cache:
             self.cache.put(model_name, context, result)
-
         return result
 
     async def recommend(self, model_name: str, prompt: str, expected_format: str = "json") -> dict[str, Any]:
@@ -314,7 +319,14 @@ class AIRouter:
             context.project_context = self._project_context()
         model = self.get_model(model_name)
         provider = getattr(model, 'backend', None) or model.__class__.__name__
-        return await provider_runtime.call(provider, lambda: model.chat(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
+        started = __import__("time").perf_counter()
+        try:
+            result = await provider_runtime.call(provider, lambda: model.chat(context), retries=2, timeout=float(os.getenv('DREAMCODER_AI_TIMEOUT','120')))
+            record_model_telemetry(model_name, provider, "chat", True, (__import__("time").perf_counter()-started)*1000)
+            return result
+        except Exception as exc:
+            record_model_telemetry(model_name, provider, "chat", False, (__import__("time").perf_counter()-started)*1000, error=str(exc))
+            raise
 
     def _project_context(self) -> str:
         files = self.index.list_files()
@@ -342,3 +354,7 @@ class AIRouter:
 
     def provider_status(self) -> dict[str,Any]:
         return provider_runtime.snapshot()
+
+    def model_telemetry(self, model_name: str | None = None) -> dict[str, Any]:
+        from model_telemetry import snapshot
+        return snapshot(model_name)

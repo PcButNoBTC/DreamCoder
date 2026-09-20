@@ -26,6 +26,7 @@ from analyzer import analyze_folder, analyze_folder_with_model, _extract_json, m
 from hf_catalog import get_catalog, search_local
 from generator import generate_project, generate_project_with_model, self_heal, files_to_zip
 from generation.orchestrator import model_capabilities
+from generation.api import router as generation_router
 from github_sync import github_sync
 from quota_tracker import snapshot as quota_snapshot
 import workspace
@@ -33,7 +34,7 @@ from agent.api import router as agent_router
 from production import readiness, diagnostics, init as production_init
 from project_memory import memory
 from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
-from security import capabilities
+from security import capabilities, audit
 from credentials import status as credential_status, get_secret as get_credential, available as credentials_available
 from censys import discover_working_ollama_models
 import github_auth, git_workflow
@@ -41,6 +42,7 @@ from git_agent import changed_files, create_agent_pr
 from terminal_session import SESSIONS, create as create_terminal_session
 from sandbox import run as sandbox_run, available as sandbox_available
 from provider_runtime import runtime as provider_runtime
+from project_health import health as project_health
 from editor_recovery import three_way_merge
 
 # ---------------------------------------------------------------------------
@@ -52,11 +54,23 @@ app = FastAPI(
 
 
 app.include_router(agent_router)
+app.include_router(generation_router)
 
+
+def _cors_origins() -> list[str]:
+    configured = os.getenv("DREAMCODER_CORS_ORIGINS", "")
+    if configured.strip():
+        return [x.strip() for x in configured.split(",") if x.strip()]
+    return [
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8001",
+        "http://localhost:8000",
+        "http://localhost:8001",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -286,6 +300,10 @@ async def production_readiness():
 async def production_diagnostics():
     return diagnostics(str(workspace.root()) if workspace.root() else None)
 
+@app.get("/api/project/health")
+async def project_health_status():
+    return project_health(str(workspace.root()) if workspace.root() else None)
+
 @app.get("/api/github/oauth/config")
 async def github_oauth_config():
     return {"configured":github_auth.configured(),"app_configured":github_auth.app_configured()}
@@ -438,6 +456,7 @@ async def terminal_session_start(req:TerminalRequest):
         candidate=Path(cwd).expanduser().resolve()
         if candidate!=root and root not in candidate.parents: raise HTTPException(400,"cwd outside workspace")
         cwd=str(candidate)
+    audit("terminal.start", command=req.command, cwd=cwd)
     s=await create_terminal_session(req.command,cwd)
     return {"id":s.id,"pid":s.proc.pid if s.proc else None,"command":s.command,"cwd":s.cwd}
 
@@ -519,6 +538,7 @@ async def health(model: Optional[str] = None):
     info = await router.health(model)
     info["db"] = {"path": str(db.DB_PATH), "stats": db.symbol_stats()}
     info["watcher"] = {"active": _watcher is not None}
+    info["model_telemetry"] = router.model_telemetry(model)
     return info
 
 
@@ -1025,6 +1045,10 @@ async def ai_provider_runtime(): return {"stats":provider_runtime.snapshot(),"ra
 @app.get("/api/ai/providers/status")
 async def ai_provider_status():
     return router.provider_status()
+
+@app.get("/api/ai/models/telemetry")
+async def ai_model_telemetry(model: Optional[str] = None):
+    return router.model_telemetry(model)
 
 @app.get("/api/github/status")
 async def github_status():

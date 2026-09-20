@@ -49,11 +49,6 @@ def root() -> Path | None:
     if value:
         p = Path(value).expanduser().resolve()
         if p.exists() and p.is_dir():
-            repo_root = _detect_default_root()
-            if repo_root is not None and p != repo_root:
-                # Keep the app anchored to the project root rather than stale temp/test paths.
-                db.set_setting("workspace_root", str(repo_root))
-                return repo_root
             return p
     detected = _detect_default_root()
     if detected is not None:
@@ -73,6 +68,7 @@ def _run(args: list[str], timeout: int = 30) -> dict[str, Any]:
 
 
 def status() -> dict[str, Any]:
+    explicit = bool(db.get_setting("workspace_root", ""))
     p = root()
     if p is None:
         return {"configured": False, "root": None, "git": False}
@@ -81,7 +77,7 @@ def status() -> dict[str, Any]:
     head = _run(["git", "rev-parse", "HEAD"])
     remote = _run(["git", "remote", "get-url", "origin"])
     return {
-        "configured": True,
+        "configured": explicit,
         "root": str(p),
         "git": git.get("ok", False),
         "branch": (branch.get("stdout") or "").strip(),

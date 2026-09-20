@@ -89,10 +89,11 @@ async def generate(prompt,goal,router):
     try: plan=parse_json((await chat(router,planner,pp)).content)
     except Exception: plan=None
     plan=plan or {"summary":prompt[:200],"language":lang,"tasks":[{"id":"implementation","role":"implementation","description":prompt,"depends_on":[]},{"id":"tests","role":"tests","description":"Create focused tests.","depends_on":[]}],"acceptance_criteria":["Requested behavior is implemented and validates."]}
-    tasks=normalize_tasks(plan.get("tasks"),prompt); completed=set(); pending={t["id"]:t for t in tasks}; outputs=[]
+    tasks=normalize_tasks(plan.get("tasks"),prompt); completed=set(); pending={t["id"]:t for t in tasks}; outputs=[]; artifact_context={}
     async def run(t):
         model=select_model(catalog,role_caps(t["role"]))
-        p=f"""You are DreamCoder's {t['role']} specialist. Implement task: {t['description']}. Return ONLY complete file blocks using ===FILE: path=== ... ===END===. Do not emit prose. Request: {prompt}\nGoal: {goal or '(none)'}\nExisting context:\n{context[:9000]}"""
+        upstream="\n\n".join(artifact_context.get(dep,"") for dep in t["depends_on"] if artifact_context.get(dep))
+        p=f"""You are DreamCoder's {t['role']} specialist. Implement task: {t['description']}. Return ONLY complete file blocks using ===FILE: path=== ... ===END===. Do not emit prose. Request: {prompt}\nGoal: {goal or '(none)'}\nUpstream task artifacts/contracts:\n{upstream[:18000] or '(none)'}\nExisting context:\n{context[:9000]}"""
         try:
             fs=parse_files((await chat(router,model,p,"project")).content)
             for f in fs:f["_task"]=t["id"]
@@ -102,6 +103,8 @@ async def generate(prompt,goal,router):
         ready=[t for t in pending.values() if all(d in completed for d in t["depends_on"])]
         if not ready: ready=[next(iter(pending.values()))]
         wave=await asyncio.gather(*(run(t) for t in ready)); outputs.extend(wave)
+        for result in wave:
+            artifact_context[result["task_id"]]="Task "+result["task_id"]+" produced files: "+", ".join(f["path"] for f in result.get("files",[]))
         for t in ready:pending.pop(t["id"],None);completed.add(t["id"])
     files,conflicts=merge_outputs(outputs)
     if not files:return {"ok":False,"source":"orchestrator","error":"No specialist produced files","plan":plan}
@@ -127,4 +130,17 @@ async def generate(prompt,goal,router):
     name="-".join(re.findall(r"[A-Za-z0-9]+",prompt.lower())[:4]) or "generated-app"
     models={"planner":planner,"specialists":{x["task_id"]:x["model"] for x in outputs},"integrator":integrator,"reviewer":reviewer}
     if repair_model:models["repair"]=repair_model
-    return {"ok":True,"source":"orchestrator","name":name,"prompt":prompt,"goal":goal,"stack":{"language":plan.get("language") or lang,"kind":"generated","build":"auto"},"files":integrated,"file_count":len(integrated),"summary":f"Task graph generated {len(integrated)} files from {len(outputs)} specialist tasks","models":models,"pipeline":["plan","parallel-specialists","integrate","review","build-test"]+(["repair"]*repairs),"tasks":outputs,"plan":plan,"conflicts":conflicts,"review":review,"validation":validation,"repair_count":repairs,"latency_ms":int((time.perf_counter()-started)*1000),"incremental_context_used":bool(context),"self_heal_ready":True}
+    try:
+        from generation.patches import patches_from_files
+        from change_plan import ChangePlan, ChangeTask
+        import workspace
+        root=workspace.root()
+        patch_root=str(root) if root else str(Path.cwd())
+        patches=patches_from_files(patch_root,integrated)
+        change_plan=ChangePlan(goal=prompt,workspace=patch_root,summary=plan.get("summary",""),language=plan.get("language") or lang,acceptance_criteria=plan.get("acceptance_criteria",[]),approval_required=True)
+        change_plan.tasks=[ChangeTask(id=t["id"],role=t["role"],description=t["description"],depends_on=t["depends_on"],model=next((x["model"] for x in outputs if x["task_id"]==t["id"]),"")) for t in tasks]
+        change_plan.patches=[{"path":p["path"],"operation":p["operation"],"patch":p["patch"],"summary":p["summary"]} for p in patches]
+        plan_record=change_plan.to_dict()
+    except Exception:
+        patches=[]; plan_record=None
+    return {"ok":True,"source":"orchestrator","name":name,"prompt":prompt,"goal":goal,"stack":{"language":plan.get("language") or lang,"kind":"generated","build":"auto"},"files":integrated,"file_count":len(integrated),"summary":f"Task graph generated {len(integrated)} files from {len(outputs)} specialist tasks","models":models,"pipeline":["plan","parallel-specialists","integrate","review","build-test"]+(["repair"]*repairs),"tasks":outputs,"plan":plan,"conflicts":conflicts,"review":review,"validation":validation,"repair_count":repairs,"patches":patches,"change_plan":plan_record,"latency_ms":int((time.perf_counter()-started)*1000),"incremental_context_used":bool(context),"self_heal_ready":True}
