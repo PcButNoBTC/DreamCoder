@@ -101,7 +101,7 @@ class AgentRuntime:
             target=Path(req.cwd)/rel
             old_content=target.read_text(encoding="utf-8") if target.exists() else ""
             diff="".join(difflib.unified_diff(old_content.splitlines(True),new_content.splitlines(True),fromfile=rel,tofile=rel))
-            valid.append({"path":rel,"content":new_content,"summary":str(item.get("summary","")),"diff":diff,"change_type":self._classify_change(req,rel,run)})
+            valid.append({"path":rel,"content":new_content,"before":old_content,"summary":str(item.get("summary","")),"diff":diff,"change_type":self._classify_change(req,rel,run)})
         return valid[:8]
 
     async def _plan(self, req: AgentRequest) -> list[PlanStep]:
@@ -182,7 +182,7 @@ class AgentRuntime:
             self._event(run, "checkpoint.created", checkpoint=checkpoint)
             audit("agent.changes", run_id=run.id, files=[x["path"] for x in changes])
             for change in changes:
-                await self._call(run,tools,"write_file",{"path":change["path"],"content":change["content"],"change_type":change.get("change_type","PROJECT_MODIFY")})
+                await self._call(run,tools,"apply_patch",{"path":change["path"],"old":change.get("before",""),"new":change["content"],"change_type":change.get("change_type","PROJECT_MODIFY")})
             sync = await github_sync.sync_files_atomic(
                 [{"path":x["path"],"content":x["content"]} for x in changes],
                 message=f"DreamCoder agent: {run.goal[:80]}",
