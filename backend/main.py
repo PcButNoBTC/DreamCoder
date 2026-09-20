@@ -304,40 +304,104 @@ async def production_diagnostics():
 async def project_health_status():
     return project_health(str(workspace.root()) if workspace.root() else None)
 
+
+@app.get("/api/workflow/state")
+async def workflow_state():
+    """Return one compact, evidence-based snapshot for the Goal → Git workflow UI."""
+    root = workspace.root()
+    git = git_workflow.status()
+    checkpoints = list_checkpoints(str(root)) if root else []
+    health = project_health(str(root)) if root else {"configured": False}
+    github = github_sync.status()
+    return {
+        "steps": {
+            "goal": bool(db.get_setting("project_goal", "").strip()),
+            "plan": True,
+            "generate": bool(root),
+            "validate": bool(health.get("test_discovery") or health.get("signals")),
+            "review": bool(git.get("dirty") or git.get("status")),
+            "apply": bool(root),
+            "checkpoint": bool(checkpoints),
+            "git": bool(git.get("branch")),
+        },
+        "goal": db.get_setting("project_goal", ""),
+        "workspace": str(root) if root else "",
+        "git": git,
+        "github": github,
+        "checkpoint_count": len(checkpoints),
+        "health": health,
+    }
+
 @app.get("/api/github/oauth/config")
 async def github_oauth_config():
-    return {"configured":github_auth.configured(),"app_configured":github_auth.app_configured()}
+    return {"configured": github_auth.configured(), "app_configured": github_auth.app_configured()}
 
 
 @app.get("/api/github/me")
-async def github_me(): return await github_auth.user()
-@app.get("/api/github/oauth/config")
-async def github_oauth_config(): return {"configured":github_auth.configured(),"app_configured":github_auth.app_configured()}
+async def github_me():
+    return await github_auth.user()
+
+
 @app.get("/api/github/repositories")
-async def github_repositories(installation_id:int|None=None): return await github_auth.repositories(installation_id)
+async def github_repositories(installation_id: int | None = None):
+    return await github_auth.repositories(installation_id)
+
+
 @app.post("/api/github/disconnect")
-async def github_disconnect(): return github_auth.disconnect()
+async def github_disconnect():
+    return github_auth.disconnect()
+
+
 @app.post("/api/github/select-repository")
-async def github_select_repository(body:dict):
-    repo=str(body.get("repo","")).strip(); branch=str(body.get("branch","main")).strip()
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repo): raise HTTPException(400,"Invalid repository")
-    db.set_setting("github_repo",repo); db.set_setting("github_branch",branch); os.environ["DREAMCODER_GITHUB_REPO"]=repo; os.environ["DREAMCODER_GITHUB_BRANCH"]=branch
-    github_sync.apply_runtime_state(repo=repo, branch=branch, token=(get_credential('github_oauth_token') if credentials_available() else '') or db.get_setting('github_oauth_token','') or os.getenv('GITHUB_TOKEN','') or os.getenv('GH_TOKEN','') or os.getenv('GITHUB_APP_TOKEN',''))
-    return {"ok":True,"repo":repo,"branch":branch}
+async def github_select_repository(body: dict):
+    repo = str(body.get("repo", "")).strip()
+    branch = str(body.get("branch", "main")).strip() or "main"
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise HTTPException(400, "Invalid repository")
+    db.set_setting("github_repo", repo)
+    db.set_setting("github_branch", branch)
+    os.environ["DREAMCODER_GITHUB_REPO"] = repo
+    os.environ["DREAMCODER_GITHUB_BRANCH"] = branch
+    github_sync.apply_runtime_state(
+        repo=repo,
+        branch=branch,
+        token=(get_credential("github_oauth_token") if credentials_available() else "")
+        or db.get_setting("github_oauth_token", "")
+        or os.getenv("GITHUB_TOKEN", "")
+        or os.getenv("GH_TOKEN", "")
+        or os.getenv("GITHUB_APP_TOKEN", ""),
+    )
+    return github_sync.status()
+
+
 @app.get("/api/git/workflow/status")
-async def git_workflow_status(): return git_workflow.status()
+async def git_workflow_status():
+    return git_workflow.status()
+
+
 @app.get("/api/git/workflow/branches")
-async def git_workflow_branches(): return git_workflow.branches()
+async def git_workflow_branches():
+    return git_workflow.branches()
+
+
 @app.get("/api/workspace/checkpoints")
-async def workspace_checkpoints(): return {"checkpoints":list_checkpoints(str(workspace.root())) if workspace.root() else []}
+async def workspace_checkpoints():
+    return {"checkpoints": list_checkpoints(str(workspace.root())) if workspace.root() else []}
+
+
 @app.post("/api/workspace/checkpoint")
-async def workspace_checkpoint(body:dict):
-    if not workspace.root(): raise HTTPException(400,"No workspace")
-    return create_checkpoint(str(workspace.root()),str(body.get("reason","manual")))
+async def workspace_checkpoint(body: dict):
+    if not workspace.root():
+        raise HTTPException(400, "No workspace")
+    return create_checkpoint(str(workspace.root()), str(body.get("reason", "manual")))
+
+
 @app.post("/api/workspace/checkpoint/restore")
-async def workspace_checkpoint_restore(body:dict):
-    if not workspace.root(): raise HTTPException(400,"No workspace")
-    return restore_checkpoint(str(workspace.root()),str(body.get("path","")))
+async def workspace_checkpoint_restore(body: dict):
+    if not workspace.root():
+        raise HTTPException(400, "No workspace")
+    return restore_checkpoint(str(workspace.root()), str(body.get("path", "")))
+
 
 @app.get("/api/github/oauth/start")
 async def github_oauth_start():
@@ -370,32 +434,6 @@ async def github_oauth_refresh():
             token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
         )
     return d
-
-@app.get("/api/github/me")
-async def github_me(): return await github_auth.user()
-
-@app.get("/api/github/installations")
-async def github_installations(): return await github_auth.installations()
-
-@app.get("/api/github/repositories")
-async def github_repositories(installation_id:int|None=None): return await github_auth.repositories(installation_id)
-
-@app.post("/api/github/disconnect")
-async def github_disconnect(): return github_auth.disconnect()
-
-@app.post("/api/github/select-repository")
-async def github_select_repository(body:dict):
-    repo=body.get("repo","")
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+",repo): raise HTTPException(400,"invalid repository")
-    db.set_setting("github_repo",repo); os.environ["DREAMCODER_GITHUB_REPO"]=repo
-    repo_branch = body.get("branch") or "main"
-    db.set_setting("github_branch",repo_branch); os.environ["DREAMCODER_GITHUB_BRANCH"]=repo_branch
-    github_sync.apply_runtime_state(
-        repo=repo,
-        branch=repo_branch,
-        token=(get_credential("github_oauth_token") if credentials_available() else "") or db.get_setting("github_oauth_token","") or os.getenv("GITHUB_TOKEN","") or os.getenv("GH_TOKEN","") or os.getenv("GITHUB_APP_TOKEN",""),
-    )
-    return github_sync.status()
 
 @app.get("/api/git/workflow/files")
 async def git_workflow_files(): return changed_files()
