@@ -47,6 +47,13 @@ async def run_benchmarks(body:BenchmarkRun):
     except Exception as exc:
         raise HTTPException(502,f"benchmark failed: {exc}")
 
+@router.post("/api/models/evaluate")
+async def evaluate_model(body:dict):
+    from main import router as ai_router
+    model_id=str(body.get("model_id","")).strip()
+    if not model_id: raise HTTPException(400,"model_id required")
+    return await model_lab.evaluator_summary(model_id,ai_router,str(body.get("evaluator_model","Local Model")))
+
 @router.get("/api/models/benchmarks/results")
 async def benchmark_results(model_id:str|None=None,limit:int=200):
     return {"results":model_lab.results(model_id,max(1,min(limit,1000)))}
