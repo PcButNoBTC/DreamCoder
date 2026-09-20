@@ -34,7 +34,7 @@ from agent.api import router as agent_router
 from production import readiness, diagnostics, init as production_init
 from project_memory import memory
 from checkpoints import list_checkpoints, create as create_checkpoint, restore as restore_checkpoint
-from security import capabilities
+from security import capabilities, audit
 from credentials import status as credential_status, get_secret as get_credential, available as credentials_available
 from censys import discover_working_ollama_models
 import github_auth, git_workflow
@@ -451,6 +451,7 @@ async def terminal_session_start(req:TerminalRequest):
         candidate=Path(cwd).expanduser().resolve()
         if candidate!=root and root not in candidate.parents: raise HTTPException(400,"cwd outside workspace")
         cwd=str(candidate)
+    audit("terminal.start", command=req.command, cwd=cwd)
     s=await create_terminal_session(req.command,cwd)
     return {"id":s.id,"pid":s.proc.pid if s.proc else None,"command":s.command,"cwd":s.cwd}
 
