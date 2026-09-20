@@ -95,9 +95,9 @@ async def run_benchmark(model_id, router, benchmark_id=None, suite_version="v1")
                     score = round(min(1.0, score + 0.15), 4) if execution_ok else round(score * 0.75, 4)
 
         conn=_conn(); conn.execute("""INSERT INTO model_benchmarks
-        (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",(model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
-        None if execution_ok is None else int(execution_ok),json.dumps({**evidence,"response_length":len(response)}),time.time()))
+        (model_id,benchmark_id,suite_version,run_id,category,role,pass,score,latency_ms,execution_ok,evidence_json,created_at,model_revision)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(model_id,b.id,suite_version,run_id,b.category,b.role,int(passed),score,latency,
+        None if execution_ok is None else int(execution_ok),json.dumps({**evidence,"response_length":len(response)}),time.time(),(get_model(model_id) or {}).get("revision","")))
         conn.commit(); conn.close()
         out.append({"run_id":run_id,"model_id":model_id,"benchmark_id":b.id,"category":b.category,"role":b.role,
                     "pass":passed,"score":score,"latency_ms":latency,"execution_ok":execution_ok,"evidence":evidence})
