@@ -120,7 +120,7 @@ def profile(model_id):
     rows=results(model_id,1000); by_role={}
     for row in rows: by_role.setdefault(row["role"],[]).append(float(row["score"]))
     roles={k:round(sum(v)/len(v),4) for k,v in by_role.items()}
-    return {"model_id":model_id,"roles":roles,"eligibility":{"eligible":bool(rows),"minimum_evidence":len(rows)>=3,"policy_gate":"deterministic"},"runs":len(rows)}
+    return {"model_id":model_id,"roles":roles,"eligibility":{"eligible":len(rows)>=3,"minimum_evidence":len(rows)>=3,"policy_gate":"deterministic"},"runs":len(rows)}
 
 def route_candidates(role,candidates=None):
     ids=candidates or [m["id"] for m in list_models()]; ranked=[]
