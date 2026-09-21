@@ -81,3 +81,7 @@ Benchmark execution is bounded by `DREAMCODER_MODEL_LAB_CONCURRENCY` (default 2)
 ## Provider discovery
 
 `POST /api/models/discover` asks the existing AI router for currently available local/Hugging Face/OpenAI-compatible/Ollama models and registers their provider metadata. `GET /api/models/{model_id}/health` checks the selected adapter directly. This keeps registry state connected to the real provider adapters rather than treating registration as proof of availability.
+
+## Production execution phase
+
+The orchestration layer now exposes provider-runtime telemetry and Model Lab health summaries. Provider calls are concurrency-limited, retried, timed out, and recorded through the existing runtime telemetry layer. The Model Lab can report candidate/eligible/stale counts and role coverage.

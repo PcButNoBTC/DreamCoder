@@ -183,6 +183,16 @@ async def evaluator_summary(model_id, router, evaluator_model="Local Model"):
     except Exception as exc:
         return {"ok":False,"evaluator_model":evaluator_model,"error":str(exc)}
 
+def health():
+    models=list_models()
+    return {
+        "registered":len(models),
+        "eligible":sum(1 for m in models if m.get("status")=="eligible"),
+        "stale":sum(1 for m in models if m.get("status")=="stale"),
+        "candidates":sum(1 for m in models if m.get("status")=="candidate"),
+        "roles":list(ROLES),
+    }
+
 def benchmark_catalog():
     return [asdict(b) for b in BENCHMARKS]
 

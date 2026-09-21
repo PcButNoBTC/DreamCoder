@@ -61,3 +61,9 @@
 - Expanded the safe Model Lab suite across implementation, frontend, API, SQL, container, and Git tasks.
 - Added per-project role-specific model preferences with auto-routing or explicit pinned configuration.
 - Added project model preference APIs and tests.
+
+
+## Production execution phase
+- Connected selected-model chat calls to the existing provider runtime for retries, concurrency limits, timeouts, and telemetry.
+- Added provider runtime observability and Model Lab health APIs.
+- Documented production execution controls.
