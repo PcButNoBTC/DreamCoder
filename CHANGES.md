@@ -31,3 +31,33 @@
 - sandbox failures are handled as warnings when the runtime is absent instead of blocking the generated app
 - local provider fallback remains cautious and avoids silently hard-coding unreachable backends
 - suggestion actions remain explicit and reviewable, reducing confusion during live editing
+
+
+## Model Lab + benchmark-driven routing
+- Added evidence-backed Model Lab and Model Registry for task-specific model selection.
+- Added repeatable benchmark cases, compact evidence storage, role profiles, and deterministic evidence routing.
+- Added advisory local-model evaluator summaries that cannot override measured eligibility.
+- Added Model Lab APIs and frontend panel for registry inspection and benchmark runs.
+- Generation can automatically use an evidence-backed generation model when one is eligible; otherwise it preserves the requested model.
+
+
+## Multi-model orchestration foundation
+- Moved Model Lab and Project Hub schemas behind formal versioned migrations.
+- Added a persistent project task graph with role-specific model assignments and API endpoints.
+- Added fresh-evidence eligibility and executable Python benchmark evidence through the hardened sandbox.
+- Wired generation tasks to measured role evidence first, with the existing capability selector as a fallback.
+- Added migration CLI and a Task Graph frontend panel.
+
+
+## Model lifecycle + observability
+- Added revision-aware benchmark evidence and stale/eligible lifecycle tracking.
+- Added persistent evaluator summaries without allowing evaluator prose to override measured routing eligibility.
+- Added optional admin-token protection for registry/benchmark/evaluation mutations.
+- Added Project Hub provenance events for task graph creation, assignment, and status changes.
+- Added model lifecycle/security tests and observability APIs.
+
+
+## Benchmark coverage + project controls
+- Expanded the safe Model Lab suite across implementation, frontend, API, SQL, container, and Git tasks.
+- Added per-project role-specific model preferences with auto-routing or explicit pinned configuration.
+- Added project model preference APIs and tests.

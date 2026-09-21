@@ -27,6 +27,10 @@ from hf_catalog import get_catalog, search_local
 from generator import generate_project, generate_project_with_model, self_heal, files_to_zip
 from generation.orchestrator import model_capabilities
 from generation.api import router as generation_router
+from project_api import router as project_router
+from model_api import router as model_lab_router
+from task_api import router as task_router
+from project_model_api import router as project_model_router
 from github_sync import github_sync
 from quota_tracker import snapshot as quota_snapshot
 import workspace
@@ -55,6 +59,10 @@ app = FastAPI(
 
 app.include_router(agent_router)
 app.include_router(generation_router)
+app.include_router(project_router)
+app.include_router(model_lab_router)
+app.include_router(task_router)
+app.include_router(project_model_router)
 
 
 def _cors_origins() -> list[str]:

@@ -3056,3 +3056,103 @@ document.querySelectorAll(".theme[data-theme]").forEach((btn) => {
 if(window.dreamcoderDesktop?.onUpdateReady){
  window.dreamcoderDesktop.onUpdateReady(info=>{if(confirm("DreamCoder "+(info?.version||"")+" is ready. Restart to install?"))window.dreamcoderDesktop.installUpdate();});
 }
+
+
+/* Project Hub — persistent living registry, timeline, documentation and provenance. */
+(function projectHubUI(){
+  const style=document.createElement("style");
+  style.textContent=".dc-hub{position:fixed;inset:6vh 5vw;z-index:11000;background:#0d121a;border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 100px #000b;display:flex;flex-direction:column;overflow:hidden}.dc-hub[hidden]{display:none}.dc-hub-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}.dc-hub-body{display:grid;grid-template-columns:280px 1fr;min-height:0;flex:1}.dc-hub-list{overflow:auto;border-right:1px solid var(--border);padding:10px}.dc-hub-card{padding:10px;margin-bottom:7px;border:1px solid var(--border);border-radius:9px;cursor:pointer}.dc-hub-card.active{border-color:var(--accent)}.dc-hub-main{overflow:auto;padding:18px}.dc-hub-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.dc-hub-tabs button,.dc-hub-head button{border:1px solid var(--border);background:#111823;color:var(--text);border-radius:7px;padding:7px 10px;cursor:pointer}.dc-hub-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.dc-hub-pre{white-space:pre-wrap;background:#080b10;padding:10px;border-radius:8px;overflow:auto}.dc-risk{font-size:11px;text-transform:uppercase;letter-spacing:.08em}.dc-hub-muted{opacity:.7;font-size:12px}@media(max-width:800px){.dc-hub{inset:2vh 2vw}.dc-hub-body{grid-template-columns:1fr}.dc-hub-list{max-height:220px;border-right:0;border-bottom:1px solid var(--border)}}";
+  document.head.appendChild(style);
+  const open=document.createElement("button"); open.className="chip"; open.textContent="◈ Project Hub"; open.style.position="fixed"; open.style.right="130px"; open.style.bottom="12px"; open.style.zIndex="9999"; document.body.appendChild(open);
+  const box=document.createElement("section"); box.className="dc-hub"; box.hidden=true;
+  box.innerHTML='<div class="dc-hub-head"><strong>DreamCoder Project Hub</strong><span class="dc-hub-muted" id="dcHubCount"></span><span style="flex:1"></span><button id="dcHubNew">+ New project</button><button id="dcHubClose">×</button></div><div class="dc-hub-body"><aside class="dc-hub-list" id="dcHubList"></aside><main class="dc-hub-main" id="dcHubMain"><div class="dc-hub-muted">Select a project.</div></main></div>';
+  document.body.appendChild(box);
+  let projects=[], selected=null, activeTab="overview";
+  async function get(path){return api(path)}
+  function esc(v){return escapeHtml(String(v??""))}
+  async function load(){
+    projects=await get("/api/projects").catch(()=>[]);
+    document.getElementById("dcHubCount").textContent=projects.length+" projects";
+    const list=document.getElementById("dcHubList");
+    list.innerHTML=projects.map(p=>'<div class="dc-hub-card '+(selected===p.id?"active":"")+'" data-p="'+esc(p.id)+'"><strong>'+esc(p.name)+'</strong><div class="dc-hub-muted">'+esc(p.status)+' · '+esc(p.risk_level)+'</div><div class="dc-hub-muted">'+esc(p.goal).slice(0,90)+'</div></div>').join("") || '<div class="dc-hub-muted">No projects yet.</div>';
+    list.querySelectorAll("[data-p]").forEach(x=>x.onclick=()=>{selected=x.dataset.p;activeTab="overview";render();});
+    if(selected && !projects.some(p=>p.id===selected)) selected=projects[0]?.id||null;
+    if(!selected && projects[0]) selected=projects[0].id;
+    render();
+  }
+  async function render(){
+    const main=document.getElementById("dcHubMain");
+    if(!selected){main.innerHTML='<div class="dc-hub-muted">Create a project from the generation workflow and it will appear here.</div>';return;}
+    const p=await get("/api/projects/"+encodeURIComponent(selected)).catch(()=>null);
+    if(!p){main.innerHTML="<div>Project unavailable.</div>";return;}
+    main.innerHTML='<div class="dc-hub-tabs">'+["overview","timeline","documents","artifacts","decisions"].map(t=>'<button data-tab="'+t+'">'+t[0].toUpperCase()+t.slice(1)+'</button>').join("")+'</div><div id="dcHubPanel"></div>';
+    main.querySelectorAll("[data-tab]").forEach(b=>{b.onclick=()=>{activeTab=b.dataset.tab;renderPanel(p)}});
+    renderPanel(p);
+  }
+  function renderPanel(p){
+    const el=document.getElementById("dcHubPanel");
+    if(activeTab==="overview"){
+      el.innerHTML='<h2>'+esc(p.name)+'</h2><p>'+esc(p.goal)+'</p><div class="dc-hub-grid"><div><b>Status</b><div>'+esc(p.status)+'</div></div><div><b>Risk</b><div class="dc-risk">'+esc(p.risk_level)+'</div></div><div><b>Stack</b><div>'+esc(JSON.stringify(p.stack))+'</div></div><div><b>Created</b><div>'+new Date(p.created_at*1000).toLocaleString()+'</div></div></div><h3>Prompt</h3><div class="dc-hub-pre">'+esc(p.prompt)+'</div>';
+    } else if(activeTab==="timeline"){
+      el.innerHTML='<h3>Activity</h3>'+((p.events||[]).map(e=>'<div class="dc-hub-card"><b>'+esc(e.event_type)+'</b> · '+esc(e.actor)+' · '+esc(e.model||"system")+'<div class="dc-hub-muted">'+new Date(e.created_at*1000).toLocaleString()+'</div><div class="dc-hub-pre">'+esc(JSON.stringify(e.payload||{},null,2))+'</div></div>').join("")||"<div>No events.</div>");
+    } else if(activeTab==="documents"){
+      el.innerHTML=(p.documents||[]).map(d=>'<article class="dc-hub-card"><h3>'+esc(d.title)+'</h3><div class="dc-hub-muted">'+esc(d.kind)+'</div><div class="dc-hub-pre">'+esc(d.content)+'</div></article>').join("")||"<div>No generated documentation yet.</div>";
+    } else if(activeTab==="artifacts"){
+      el.innerHTML=(p.artifacts||[]).map(a=>'<div class="dc-hub-card"><b>'+esc(a.kind)+'</b><div>'+esc(a.path)+'</div><div class="dc-hub-pre">'+esc(JSON.stringify(a.metadata||{},null,2))+'</div></div>').join("")||"<div>No artifacts recorded.</div>";
+    } else {
+      el.innerHTML=(p.decisions||[]).map(d=>'<div class="dc-hub-card"><b>'+esc(d.decision)+'</b><p>'+esc(d.rationale)+'</p><div class="dc-hub-muted">Model: '+esc(d.model)+'</div></div>').join("")||"<div>No decisions recorded.</div>";
+    }
+  }
+  open.onclick=()=>{box.hidden=false;load()};
+  box.querySelector("#dcHubClose").onclick=()=>box.hidden=true;
+  box.querySelector("#dcHubNew").onclick=()=>{box.hidden=true;document.getElementById("evolveInput")?.focus();toast("Create the project through Generate; it will automatically appear in Project Hub.","info")};
+})();
+
+
+/* Model Lab — evidence-backed registry, benchmark runs and task routing. */
+(function modelLabUI(){
+  const style=document.createElement("style");
+  style.textContent=".dc-lab{position:fixed;inset:8vh 8vw;z-index:11001;background:#0d121a;border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 100px #000b;display:flex;flex-direction:column;overflow:hidden}.dc-lab[hidden]{display:none}.dc-lab-head{display:flex;gap:10px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)}.dc-lab-body{padding:16px;overflow:auto}.dc-lab-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.dc-lab-card{border:1px solid var(--border);border-radius:9px;padding:10px}.dc-lab-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}.dc-lab-actions button{border:1px solid var(--border);background:#111823;color:var(--text);border-radius:7px;padding:7px 10px;cursor:pointer}@media(max-width:800px){.dc-lab{inset:2vh 2vw}.dc-lab-grid{grid-template-columns:1fr}}";
+  document.head.appendChild(style);
+  const open=document.createElement("button"); open.className="chip"; open.textContent="◈ Model Lab"; open.style.position="fixed"; open.style.right="245px"; open.style.bottom="12px"; open.style.zIndex="9999"; document.body.appendChild(open);
+  const box=document.createElement("section"); box.className="dc-lab"; box.hidden=true;
+  box.innerHTML='<div class="dc-lab-head"><strong>DreamCoder Model Lab</strong><span style="flex:1"></span><button id="dcLabClose">×</button></div><div class="dc-lab-body"><div class="dc-lab-actions"><button id="dcLabRefresh">Refresh registry</button><button id="dcLabBench">Run selected model</button></div><div id="dcLabContent" class="dc-lab-muted">Loading…</div></div>';
+  document.body.appendChild(box);
+  let selectedModel="";
+  function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+  async function render(){
+    const [reg,res]=await Promise.all([api("/api/models/registry"),api("/api/models/benchmarks/results")]);
+    const models=reg.models||[]; if(!selectedModel&&models[0])selectedModel=models[0].id;
+    const rows=(res.results||[]).slice(0,30);
+    document.getElementById("dcLabContent").innerHTML='<div class="dc-lab-grid">'+
+      '<div class="dc-lab-card"><strong>Registry</strong><p>'+models.map(m=>'<button data-model="'+esc(m.id)+'" style="display:block;margin:5px 0;width:100%;text-align:left;background:none;border:0;color:var(--text);cursor:pointer">'+esc(m.name)+' <span class="dc-hub-muted">('+esc(m.provider)+')</span></button>').join("")+'</p></div>'+
+      '<div class="dc-lab-card"><strong>Recent evidence</strong><div>'+rows.map(x=>'<div style="margin:6px 0">'+esc(x.model_id)+' · '+esc(x.role)+' · '+Number(x.score).toFixed(2)+' · '+(x.pass?"pass":"review")+'</div>').join("")+'</div></div></div>';
+    box.querySelectorAll("[data-model]").forEach(btn=>btn.onclick=()=>{selectedModel=btn.dataset.model;render()});
+  }
+  open.onclick=async()=>{box.hidden=false;await render()};
+  document.getElementById("dcLabClose").onclick=()=>box.hidden=true;
+  document.getElementById("dcLabRefresh").onclick=render;
+  document.getElementById("dcLabBench").onclick=async()=>{if(!selectedModel)return;await api("/api/models/benchmarks/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model_id:selectedModel})});await render()};
+})();
+
+/* Orchestration task graph — persistent multi-role execution view. */
+(function taskGraphUI(){
+  const b=document.createElement("button"); b.className="chip"; b.textContent="◇ Task Graph";
+  b.style.cssText="position:fixed;right:360px;bottom:12px;z-index:9999";
+  document.body.appendChild(b);
+  const box=document.createElement("section"); box.style.cssText="position:fixed;inset:10vh 12vw;z-index:11002;background:#0d121a;border:1px solid var(--border);border-radius:14px;box-shadow:0 30px 100px #000b;padding:16px;overflow:auto;display:none";
+  document.body.appendChild(box);
+  async function render(){
+    const projects=await api("/api/projects").catch(()=>[]);
+    if(!projects.length){box.innerHTML="<h3>Task Graph</h3><p>No Project Hub projects yet.</p>";return;}
+    const p=projects[0];
+    const data=await api("/api/projects/"+encodeURIComponent(p.id)+"/tasks").catch(()=>({tasks:[]}));
+    const tasks=data.tasks||[];
+    box.innerHTML="<div style='display:flex;gap:8px;align-items:center'><h3 style='margin:0'>Task Graph · "+escapeHtml(p.name)+"</h3><span style='flex:1'></span><button id='tgPlan'>Plan / assign</button><button id='tgClose'>×</button></div>"+
+      "<p class='muted'>Each task is assigned by role evidence when available; otherwise the existing capability router remains the fallback.</p>"+
+      "<div>"+tasks.map(t=>"<div style='border:1px solid var(--border);border-radius:8px;padding:9px;margin:7px 0'><b>"+escapeHtml(t.title)+"</b> · "+escapeHtml(t.role)+"<br><span class='muted'>"+escapeHtml(t.status)+" · "+escapeHtml(t.model_id||"unassigned")+"</span></div>").join("")+"</div>";
+    box.querySelector("#tgClose").onclick=()=>box.style.display="none";
+    box.querySelector("#tgPlan").onclick=async()=>{await api("/api/projects/"+encodeURIComponent(p.id)+"/tasks/plan",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});await render();};
+  }
+  b.onclick=()=>{box.style.display="block";render();};
+})();

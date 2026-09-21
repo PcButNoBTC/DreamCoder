@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from models.base import ChatContext
 from model_capabilities import select_model
+from model_lab import route as route_model
 
 FILE_RE = re.compile(r"===FILE:\s*(.+?)===\n(.*?)\n===END===", re.DOTALL)
 
@@ -81,17 +82,33 @@ def validate(files,language):
             return {"ok":p.returncode==0,"exit_code":p.returncode,"command":command,"stdout":p.stdout[-12000:],"stderr":p.stderr[-12000:]}
         except subprocess.TimeoutExpired:return {"ok":False,"exit_code":124,"stderr":"Validation timed out","command":command}
 
-async def generate(prompt,goal,router):
+def role_route(role, catalog):
+    mapping={"implementation":"generation","frontend":"generation","backend":"generation","tests":"testing","testing":"testing",
+             "debugging":"debugging","debug":"debugging","documentation":"documentation","docs":"documentation",
+             "review":"review","integration":"review","planner":"planning","planning":"planning",
+             "architecture":"repository_reasoning","repository_reasoning":"repository_reasoning"}
+    target=mapping.get((role or "").lower(),"generation")
+    try:
+        routed=route_model(target)
+        if routed.get("model_id"):
+            ids={m.get("id") for m in catalog}
+            if routed["model_id"] in ids or "/" in routed["model_id"] or ":" in routed["model_id"]:
+                return routed["model_id"]
+    except Exception:
+        pass
+    return None
+
+async def generate(prompt,goal,router,preferred_model=None):
     started=time.perf_counter(); catalog=await router.list_models(); lang=language_hint(prompt)
     context=getattr(router,"_project_context",lambda:"")()
-    planner=select_model(catalog,{"planning","reasoning"})
+    planner=preferred_model or role_route("planning",catalog) or select_model(catalog,{"planning","reasoning"})
     pp=f"""Return ONLY JSON with summary, language, tasks, acceptance_criteria. Each task needs id, role, description, depends_on. Split independent work for parallel execution.\nRequest: {prompt}\nGoal: {goal or '(none)'}\nLanguage: {lang}\nExisting context:\n{context[:12000]}"""
     try: plan=parse_json((await chat(router,planner,pp)).content)
     except Exception: plan=None
     plan=plan or {"summary":prompt[:200],"language":lang,"tasks":[{"id":"implementation","role":"implementation","description":prompt,"depends_on":[]},{"id":"tests","role":"tests","description":"Create focused tests.","depends_on":[]}],"acceptance_criteria":["Requested behavior is implemented and validates."]}
     tasks=normalize_tasks(plan.get("tasks"),prompt); completed=set(); pending={t["id"]:t for t in tasks}; outputs=[]; artifact_context={}
     async def run(t):
-        model=select_model(catalog,role_caps(t["role"]))
+        model=role_route(t["role"],catalog) or (preferred_model if t["role"] in {"implementation","generation"} else None) or select_model(catalog,role_caps(t["role"]))
         upstream="\n\n".join(artifact_context.get(dep,"") for dep in t["depends_on"] if artifact_context.get(dep))
         p=f"""You are DreamCoder's {t['role']} specialist. Implement task: {t['description']}. Return ONLY complete file blocks using ===FILE: path=== ... ===END===. Do not emit prose. Request: {prompt}\nGoal: {goal or '(none)'}\nUpstream task artifacts/contracts:\n{upstream[:18000] or '(none)'}\nExisting context:\n{context[:9000]}"""
         try:
@@ -108,19 +125,19 @@ async def generate(prompt,goal,router):
         for t in ready:pending.pop(t["id"],None);completed.add(t["id"])
     files,conflicts=merge_outputs(outputs)
     if not files:return {"ok":False,"source":"orchestrator","error":"No specialist produced files","plan":plan}
-    integrator=select_model(catalog,{"integration","code-review"})
+    integrator=role_route("integration",catalog) or select_model(catalog,{"integration","code-review"})
     bundle="\n\n".join(f"===FILE: {f['path']}===\n{f['content']}\n===END===" for f in files)
     ip=f"""You are the integration specialist. Return ONLY complete file blocks. Merge these specialist outputs into one coherent runnable project, resolving conflicts, imports, APIs and tests. Request: {prompt}\nCriteria: {json.dumps(plan.get('acceptance_criteria',[]))}\nConflicts: {json.dumps(conflicts)}\n{bundle[:60000]}"""
     try: integrated=parse_files((await chat(router,integrator,ip,"project")).content) or files
     except Exception: integrated=files
-    reviewer=select_model(catalog,{"code-review","reasoning"})
+    reviewer=role_route("review",catalog) or select_model(catalog,{"code-review","reasoning"})
     rp=f"""Return ONLY JSON with approved, summary, issues, repair_instructions. Review this project against the request and criteria. Request: {prompt}\nCriteria: {json.dumps(plan.get('acceptance_criteria',[]))}\n{bundle[:60000]}"""
     try:review=parse_json((await chat(router,reviewer,rp)).content) or {"approved":True,"summary":"No structured findings.","issues":[],"repair_instructions":[]}
     except Exception as e:review={"approved":True,"summary":f"Review unavailable: {e}","issues":[],"repair_instructions":[]}
     validation=validate(integrated,lang); repair_model=None; repairs=0
     for _ in range(2):
         if validation.get("ok") and review.get("approved",True):break
-        repair_model=select_model(catalog,{"debugging","code-generation"})
+        repair_model=role_route("debugging",catalog) or select_model(catalog,{"debugging","code-generation"})
         rprompt=f"""Repair the project. Return ONLY complete file blocks. Fix the concrete validation errors and review findings without removing working behavior. Request: {prompt}\nValidation: {json.dumps(validation)}\nReview: {json.dumps(review)}\nFiles:\n{bundle[:60000]}"""
         try: fixed=parse_files((await chat(router,repair_model,rprompt,"project")).content)
         except Exception:fixed=[]

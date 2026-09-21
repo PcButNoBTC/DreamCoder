@@ -875,117 +875,60 @@ def _gen_java(name: str, prompt: str, goal: str) -> list[dict[str, str]]:
 
 
 
-async def generate_project_with_model(prompt: str, project_goal: str = "", router=None) -> dict[str, Any]:
-    """Run the capability-routed task graph. Template generation remains the caller's fallback."""
-    if router is None:
-        raise ValueError("router is required for model generation")
-    from generation.orchestrator import orchestrate_generation
-    return await orchestrate_generation(prompt, project_goal, router)
-
-def self_heal(
-    error_text: str,
-    files: list[dict[str, str]],
-    language: str = "python",
-) -> dict[str, Any]:
-    """Propose fixed file versions given an error message."""
-    start = time.perf_counter()
-    err = (error_text or "").lower()
-    patches: list[dict[str, str]] = []
-    reasons: list[str] = []
-
-    for f in files:
-        path = f.get("path") or ""
-        content = f.get("content") or ""
-        new_content = content
-        changed = False
-
-        if "modulenotfounderror" in err or "cannot find module" in err:
-            if path.endswith("requirements.txt") and "fastapi" in err:
-                if "fastapi" not in content:
-                    new_content = content + "fastapi>=0.115.0\n"
-                    changed = True
-                    reasons.append("Added missing dependency to requirements.txt")
-        if "syntaxerror" in err or "expected" in err:
-            if language == "python" and path.endswith(".py"):
-                # ensure final newline
-                if not content.endswith("\n"):
-                    new_content = content + "\n"
-                    changed = True
-                    reasons.append(f"Normalized trailing newline in {path}")
-        if "undefined reference" in err or "unresolved external" in err:
-            if path.endswith(".cpp") or path.endswith(".c"):
-                reasons.append(f"Link error – check {path} is listed in the build file")
-        if "goal" in err and "empty" in err:
-            reasons.append("Validation rejected empty goal – pass a non-empty project goal")
-
-        if changed:
-            patches.append({"path": path, "content": new_content, "action": "replace"})
-
-    if not patches and not reasons:
-        reasons.append(
-            "No automatic patch pattern matched. Share the full error + language for a deeper fix, "
-            "or open the failing file and request Suggest / Evolve."
-        )
-        # Provide a generic debug wrapper suggestion
-        if language == "python":
-            patches.append(
-                {
-                    "path": "debug_wrapper.py",
-                    "content": (
-                        "import traceback\n"
-                        "try:\n"
-                        "    import main\n"
-                        "    main.main()\n"
-                        "except Exception:\n"
-                        "    traceback.print_exc()\n"
-                    ),
-                    "action": "create",
-                }
-            )
-            reasons.append("Added debug_wrapper.py to capture full stack traces")
-
-    return {
-        "patches": patches,
-        "reasons": reasons,
-        "error_excerpt": error_text[:500],
-        "latency_ms": int((time.perf_counter() - start) * 1000) + 20,
-        "ok": bool(patches) or bool(reasons),
-    }
-
-
-def files_to_zip(files: list[dict[str, str]]) -> bytes:
-    buf = BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in files:
-            path = f.get("path") or "file.txt"
-            content = f.get("content") or ""
-            z.writestr(path, content)
-    return buf.getvalue()
-
-
-FILE_BLOCK_RE = re.compile(r"===FILE:\s*(.+?)===\n(.*?)\n===END===", re.DOTALL)
-GENERATOR_SYSTEM_PROMPT = """You are DreamCoder's implementation engineer, not a scaffolding tool.
-When asked to build an app, implement the requested product completely enough to run and demonstrate the requested behavior.
-Respond ONLY with a sequence of file blocks in this exact format:
-===FILE: path/to/file.ext===
-<complete file contents>
-===END===
-
-Rules:
-- Translate EVERY concrete requirement in the user request into working code, UI, routes, state, data handling, and assets as applicable.
-- Do not create placeholder stubs, fake features, coming-soon screens, TODO-only functions, or generic hello-world substitutes when the request asks for a real feature.
-- Do not merely create a project structure: implement the behavior.
-- Include every file required to run the app: manifests, configuration, entry points, templates/static assets, data setup, and tests when appropriate.
-- Prefer a small dependency set and do not invent dependencies that are unnecessary for the requested stack.
-- Include useful error handling and a runnable entry point.
-- The generated app must demonstrate the requested core workflow immediately after installation/startup.
-- For desktop/web UI, implement the actual controls, interactions, persistence/state, and visual layout described by the user rather than mock buttons.
-- If the request names a reference product, reproduce the requested capabilities and interaction model without copying proprietary source code.
-- Do not claim a feature is implemented unless its code is present in the returned files.
-- No prose and no markdown fences outside file blocks.
-"""
-
 async def generate_project_with_model(prompt: str, project_goal: str, router) -> dict[str, Any]:
     """Run DreamCoder's multi-model planner -> implementer -> reviewer pipeline."""
     from generation.orchestrator import orchestrate_generation
-    return await orchestrate_generation(prompt, project_goal, router)
+    return await orchestrate_generation(prompt, project_goal, router, preferred_model=model)
+
+
+async def generate_project_with_model(prompt: str, project_goal: str = "", router=None, model: str = "Local Model") -> dict[str, Any]:
+    """Generate a project through the selected model, with a deterministic template fallback.
+
+    The model is an orchestration input, not a policy bypass. If its response is
+    unavailable or malformed, DreamCoder still returns a reviewable scaffold.
+    """
+    if router is None:
+        from main import router as router
+    from models.base import ChatContext
+
+    request = (
+        "Generate a benign software project from this request. Return JSON only with "
+        "keys name, summary, files. files must be an array of objects with path and content. "
+        "Keep the project self-contained and include tests when practical. Do not use "
+        "markdown fences around the JSON.\n\n"
+        f"Goal: {project_goal or prompt}\nRequest: {prompt}"
+    )
+    started = time.perf_counter()
+    try:
+        response = await router.chat(model, ChatContext(message=request, mode="analysis"))
+        raw = response.content.strip()
+        match = re.search(r"\\{.*\\}", raw, re.S)
+        if match:
+            payload = json.loads(match.group(0))
+            files = payload.get("files")
+            if isinstance(files, list) and files and all(isinstance(x, dict) and x.get("path") is not None and x.get("content") is not None for x in files):
+                stack = _detect_stack(prompt)
+                name = str(payload.get("name") or _slug(prompt))
+                return {
+                    "name": name,
+                    "prompt": prompt,
+                    "goal": project_goal or prompt.strip()[:200],
+                    "stack": stack,
+                    "files": [{"path": str(x["path"]), "content": str(x["content"])} for x in files],
+                    "pages": [{"id":"model","title":"Model generation","detail":f"Generated by {model}"}],
+                    "file_count": len(files),
+                    "latency_ms": int((time.perf_counter()-started)*1000),
+                    "summary": str(payload.get("summary") or f"Generated {len(files)}-file project"),
+                    "run_hint": _run_hint(stack, name),
+                    "self_heal_ready": True,
+                    "source": "model",
+                    "model": model,
+                }
+    except Exception:
+        pass
+
+    result = generate_project(prompt, project_goal)
+    result["source"] = "template-fallback"
+    result["model"] = model
+    result["latency_ms"] = int((time.perf_counter()-started)*1000)
+    return result
