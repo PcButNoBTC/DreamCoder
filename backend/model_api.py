@@ -131,3 +131,7 @@ async def model_health(model_id:str):
 async def model_runtime():
     from provider_runtime import runtime
     return {"providers": runtime.snapshot()}
+
+@router.get("/api/models/health")
+async def models_health():
+    return {"model_lab":model_lab.health()}
