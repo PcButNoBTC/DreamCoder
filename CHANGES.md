@@ -1,75 +1,95 @@
-# DreamCoder — change log
+# DreamCoder — Change Log
 
-## Latest updates
-- Hardened terminal WebSocket routing so desktop/browser sessions derive the `ws`/`wss` endpoint from the configured DreamCoder API base instead of assuming `hostname:8000`.
-- Fixed the generation build path so missing Docker/Podman sandbox runtime no longer turns a valid generated project into a hard failure.
-- Added the suggestion review flow with Apply / Preview / Ignore actions to make AI recommendations feel like reviewable project decisions rather than opaque output.
-- Refreshed the product positioning so DreamCoder is framed as an AI creation engine for building software from goals, not just as a prompt shell.
-- Updated the repo docs to describe the full project-creation loop: understand → plan → generate → validate → refine.
-- Kept the local fallback logic resilient when Ollama is missing or unreachable while still supporting real local provider paths.
+## Product direction
 
-## Added
-- generation validation fallback that still reports success when sandbox runtime is unavailable
-- regression tests covering generator builds with no sandbox installed
-- project-level guidance in documentation for goal-first AI development
-- clearer product framing for multi-model project creation and model-choice improvements
+DreamCoder is evolving from an AI coding workspace into an **AI-native development studio**: a system for turning natural-language goals into structured, validated, documented software projects.
 
-## Changed
-- README now focuses on AI-native creation workflows instead of only local IDE status
-- project docs now emphasize whole-project analysis, validation loops, and approval-driven edits
-- suggestion actions are more reviewable and less ambiguous for users
-- the vision now extends beyond “one file at a time” toward “build anything from intent” workflows
+The product is organized around:
 
-## Future roadmap
-- multi-model project ranking by task type and project context
-- persistent project memory across sessions and revisions
-- stronger validation and repair loops using real build/test errors
-- safer approval gates for repo-wide and multi-file changes
-- stronger support for general creation workflows: web apps, CLIs, APIs, internal tools, and automation
+**Goal → Plan → Generate → Validate → Review → Apply → Checkpoint → Git**
 
-## Security and reliability
-- sandbox failures are handled as warnings when the runtime is absent instead of blocking the generated app
-- local provider fallback remains cautious and avoids silently hard-coding unreachable backends
-- suggestion actions remain explicit and reviewable, reducing confusion during live editing
+and the underlying change lifecycle:
 
+**Inspect → Plan → Contract → Patch → Review → Validate → Repair → Approve → Git**
 
-## Model Lab + benchmark-driven routing
-- Added evidence-backed Model Lab and Model Registry for task-specific model selection.
-- Added repeatable benchmark cases, compact evidence storage, role profiles, and deterministic evidence routing.
-- Added advisory local-model evaluator summaries that cannot override measured eligibility.
-- Added Model Lab APIs and frontend panel for registry inspection and benchmark runs.
-- Generation can automatically use an evidence-backed generation model when one is eligible; otherwise it preserves the requested model.
+## Current capabilities
 
+### Project Hub
+- Persistent project registry and project overview.
+- Goals, original prompts, requirements, decisions, documents, artifacts, events, checkpoints, and release-oriented provenance.
+- Searchable project history and living documentation.
 
-## Multi-model orchestration foundation
-- Moved Model Lab and Project Hub schemas behind formal versioned migrations.
-- Added a persistent project task graph with role-specific model assignments and API endpoints.
-- Added fresh-evidence eligibility and executable Python benchmark evidence through the hardened sandbox.
-- Wired generation tasks to measured role evidence first, with the existing capability selector as a fallback.
-- Added migration CLI and a Task Graph frontend panel.
+### Multi-model orchestration
+- Model Registry with provider, revision, metadata, and lifecycle information.
+- Model Lab benchmark suite covering planning, coding, debugging, testing, documentation, repository reasoning, tool-use planning, frontend/API/SQL/container/Git tasks, and boundary consistency.
+- Evidence-backed role routing.
+- Repeatable benchmark runs and revision regression tracking.
+- Project-level automatic or pinned model preferences.
+- Advisory evaluator summaries that do not override measured eligibility.
 
+### Task Graph
+- Persistent tasks with roles, dependencies, inputs, outputs, status, and model assignments.
+- Task-level provenance.
+- Foundation for multi-specialist project execution.
 
-## Model lifecycle + observability
-- Added revision-aware benchmark evidence and stale/eligible lifecycle tracking.
-- Added persistent evaluator summaries without allowing evaluator prose to override measured routing eligibility.
-- Added optional admin-token protection for registry/benchmark/evaluation mutations.
-- Added Project Hub provenance events for task graph creation, assignment, and status changes.
-- Added model lifecycle/security tests and observability APIs.
+### Durable execution
+- Persistent execution jobs with priority, retry, cancellation, result, and error state.
+- Worker lifecycle integrated with the backend.
+- Project task execution through the durable queue.
+- Assigned-model execution and durable task output.
 
+### Runtime and observability
+- Provider runtime retries, timeouts, concurrency controls, and telemetry.
+- Model runtime and health APIs.
+- Model discovery.
+- Model Lab resource controls.
+- Evidence and provenance intended to make orchestration decisions inspectable.
 
-## Benchmark coverage + project controls
-- Expanded the safe Model Lab suite across implementation, frontend, API, SQL, container, and Git tasks.
-- Added per-project role-specific model preferences with auto-routing or explicit pinned configuration.
-- Added project model preference APIs and tests.
+### Generation and change management
+- Structured generation lifecycle.
+- Change-plan metadata.
+- Patch preconditions for existing-project edits.
+- Reviewable Apply / Preview / Ignore interactions.
+- Validation and repair-oriented workflow foundations.
 
+### Safety and execution controls
+- Safety assessment and independent review paths.
+- Hardened sandbox configuration.
+- Resource/process limits.
+- Non-root execution.
+- Network disabled by default for sandboxed execution.
+- Secure credential and audit-store handling.
+- Production readiness checks.
 
-## Production execution phase
-- Connected selected-model chat calls to the existing provider runtime for retries, concurrency limits, timeouts, and telemetry.
-- Added provider runtime observability and Model Lab health APIs.
-- Documented production execution controls.
+### Git and repository workflows
+- Git-aware project context and workflow state.
+- Checkpoint and synchronization foundations.
+- Optional GitHub integration.
+- Release-oriented architecture.
 
+## Product architecture
 
-## Production execution queue
-- Added a formal v6 migration for durable execution jobs with priority, retry, cancellation, and result state.
-- Added a persistent execution queue worker and APIs for queue inspection, cancellation, generic model jobs, and project task execution.
-- Task execution uses the task graph's assigned model and records durable task completion/output rather than losing work in process memory.
+DreamCoder is intentionally built as several cooperating layers:
+
+1. **Project Hub** — durable project knowledge and provenance.
+2. **Task Graph** — structured development work and dependencies.
+3. **Model Lab** — measurable model capability evidence.
+4. **Evidence Router** — role-aware model selection.
+5. **Execution Queue** — durable work execution and retry.
+6. **Provider Runtime** — model-provider execution controls.
+7. **Generation / Validation** — project changes and objective evidence.
+8. **Review / Checkpoint / Git** — human approval and durable project progress.
+
+## Direction of travel
+
+The next layers are centered on:
+- real repository build/test/evaluation loops
+- richer DAG execution and resume behavior
+- continuous model benchmarking and freshness
+- model lifecycle and resource accounting
+- project-wide validation and repair
+- release automation
+- richer frontend control-plane visibility
+- production authentication and execution limits
+- comprehensive CI and end-to-end regression coverage
+
