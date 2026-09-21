@@ -31,6 +31,7 @@ from project_api import router as project_router
 from model_api import router as model_lab_router
 from task_api import router as task_router
 from project_model_api import router as project_model_router
+from execution_api import router as execution_router, start_worker, stop_worker
 from github_sync import github_sync
 from quota_tracker import snapshot as quota_snapshot
 import workspace
@@ -63,6 +64,7 @@ app.include_router(project_router)
 app.include_router(model_lab_router)
 app.include_router(task_router)
 app.include_router(project_model_router)
+app.include_router(execution_router)
 
 
 def _cors_origins() -> list[str]:
@@ -85,6 +87,14 @@ app.add_middleware(
 )
 
 router = AIRouter()
+
+@app.on_event("startup")
+async def _start_execution_worker():
+    await start_worker()
+
+@app.on_event("shutdown")
+async def _stop_execution_worker():
+    await stop_worker()
 db.init_db()
 production_init()
 def refresh_github_runtime_state() -> dict[str, Any]:
