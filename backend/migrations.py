@@ -2,7 +2,7 @@
 from __future__ import annotations
 import sqlite3, time
 
-CURRENT_VERSION = 5
+CURRENT_VERSION = 6
 
 MIGRATIONS = {
     1: """
@@ -82,6 +82,18 @@ MIGRATIONS = {
       id INTEGER PRIMARY KEY AUTOINCREMENT, model_id TEXT NOT NULL, evaluator_model TEXT NOT NULL,
       profile_json TEXT NOT NULL, summary TEXT NOT NULL, created_at REAL NOT NULL
     );
+    """,
+    6: """
+    CREATE TABLE IF NOT EXISTS execution_jobs (
+      id TEXT PRIMARY KEY, project_id TEXT NOT NULL DEFAULT '', task_id TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'queued',
+      priority INTEGER NOT NULL DEFAULT 100, attempt INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
+      error TEXT NOT NULL DEFAULT '', result_json TEXT NOT NULL DEFAULT '{}',
+      created_at REAL NOT NULL, updated_at REAL NOT NULL, started_at REAL, completed_at REAL
+    );
+    CREATE INDEX IF NOT EXISTS idx_execution_jobs_queue ON execution_jobs(status, priority, created_at);
+    CREATE INDEX IF NOT EXISTS idx_execution_jobs_project ON execution_jobs(project_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_execution_jobs_task ON execution_jobs(task_id, created_at);
     """,
 }
 
