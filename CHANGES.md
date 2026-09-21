@@ -61,3 +61,9 @@
 - Expanded the safe Model Lab suite across implementation, frontend, API, SQL, container, and Git tasks.
 - Added per-project role-specific model preferences with auto-routing or explicit pinned configuration.
 - Added project model preference APIs and tests.
+
+
+## Production execution queue
+- Added a formal v6 migration for durable execution jobs with priority, retry, cancellation, and result state.
+- Added a persistent execution queue worker and APIs for queue inspection, cancellation, generic model jobs, and project task execution.
+- Task execution uses the task graph's assigned model and records durable task completion/output rather than losing work in process memory.
