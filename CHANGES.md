@@ -67,3 +67,9 @@
 - Connected selected-model chat calls to the existing provider runtime for retries, concurrency limits, timeouts, and telemetry.
 - Added provider runtime observability and Model Lab health APIs.
 - Documented production execution controls.
+
+
+## Production execution queue
+- Added a formal v6 migration for durable execution jobs with priority, retry, cancellation, and result state.
+- Added a persistent execution queue worker and APIs for queue inspection, cancellation, generic model jobs, and project task execution.
+- Task execution uses the task graph's assigned model and records durable task completion/output rather than losing work in process memory.
